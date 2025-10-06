@@ -1030,6 +1030,34 @@ def close_delivery_note(request, pk):
     
     return JsonResponse({'success': False, 'message': 'Invalid request method.'})
 
+
+@user_passes_test(is_admin)
+def deactivate_active_delivery_note(request, pk):
+    """Deactivate an active delivery note without necessarily closing it completely."""
+    if request.method == 'POST':
+        delivery_note = get_object_or_404(DeliveryNote, pk=pk)
+        
+        # Deactivate the scanning state but preserve the status if it's not complete
+        if delivery_note.is_being_scanned:
+            delivery_note.is_being_scanned = False
+            # Only change to closed if it was actually completed
+            if delivery_note.is_scanning_complete():
+                delivery_note.status = 'Closed'
+            delivery_note.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Delivery note {delivery_note.delivery_note_number} has been deactivated and is no longer active for scanning.'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': f'Delivery note {delivery_note.delivery_note_number} is not currently active for scanning.'
+            })
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request method.'})
+
+
 @login_required
 @user_passes_test(is_admin)
 def delivery_note_bale_recall(request, pk):

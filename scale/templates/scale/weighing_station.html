@@ -291,8 +291,13 @@
             <div id="active-delivery-note-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 {% if not active_delivery_note %}hidden{% endif %}">
                 <div class="px-6 py-5 border-b border-zinc-200 bg-green-50">
                     <div class="flex flex-col items-center justify-between">
-                        <h2 class="text-md font-medium text-zinc-900">ACTIVE DNOTE</h2>
-                        <div class="flex items-center text-green-600">
+                        <div class="flex justify-between w-full items-center">
+                            <h2 class="text-md font-medium text-zinc-900">ACTIVE DNOTE</h2>
+                            <button type="button" id="close-current-dnote-btn" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-700 h-8 px-3 py-1">
+                                Close DNote
+                            </button>
+                        </div>
+                        <div class="flex items-center text-green-600 mt-2">
                             <svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
                             </svg>
@@ -1968,6 +1973,63 @@
                         // Re-enable button
                         confirmCloseBtn.textContent = originalText;
                         confirmCloseBtn.disabled = false;
+                    }
+                });
+            });
+        }
+        
+        // New: Handle Close Current DNote Button (to deactivate the current active note without completing it)
+        const closeCurrentDnoteBtn = document.getElementById('close-current-dnote-btn');
+        if (closeCurrentDnoteBtn) {
+            closeCurrentDnoteBtn.addEventListener('click', function() {
+                const dnoteId = document.getElementById('active-delivery-note-id').value;
+                if (!dnoteId) {
+                    showNotification('No active delivery note to close.', 'error');
+                    return;
+                }
+                
+                // Show confirmation dialog
+                if (!confirm('Are you sure you want to close this delivery note? All unsaved progress will be preserved but the note will be deactivated.')) {
+                    return;
+                }
+                
+                // Disable button and show loading
+                const originalText = this.textContent;
+                this.textContent = 'Closing...';
+                this.disabled = true;
+                
+                // Use the deactivate endpoint to close the active scanning state
+                const url = "{% url 'scale:deactivate_delivery_note' 0 %}".replace('0', dnoteId);
+                
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(data) {
+                        if (data.success) {
+                            showNotification(data.message, 'success');
+                            
+                            // Clear active Dnote state on the frontend
+                            document.getElementById('active-delivery-note-card').classList.add('hidden');
+                            document.getElementById('active-delivery-note-id').value = '';
+                            document.getElementById('dnote-closure-confirmation').classList.add('hidden');
+                            document.getElementById('barcode-input').value = '';
+                            document.getElementById('barcode-input').focus();
+                            
+                        } else {
+                            showNotification(data.message, 'error');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        showNotification('Error closing delivery note.', 'error');
+                        console.error('Error closing Dnote:', error);
+                    },
+                    complete: function() {
+                        // Re-enable button
+                        closeCurrentDnoteBtn.textContent = originalText;
+                        closeCurrentDnoteBtn.disabled = false;
                     }
                 });
             });

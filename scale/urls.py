@@ -48,6 +48,7 @@ urlpatterns = [
     path('delivery-notes/<int:pk>/edit/', views.delivery_note_edit, name='delivery_note_edit'),
     path('delivery-notes/<int:pk>/delete/', views.delivery_note_delete, name='delivery_note_delete'),
     path('delivery-notes/<int:pk>/close/', views.close_delivery_note, name='close_delivery_note'),
+    path('delivery-notes/<int:pk>/deactivate/', views.deactivate_active_delivery_note, name='deactivate_delivery_note'),
     path('delivery-notes/<int:pk>/suspend/', views.delivery_note_suspend, name='delivery_note_suspend'),
     path('delivery-notes/<int:pk>/recall-bales/', views.delivery_note_bale_recall, name='delivery_note_bale_recall'),
     path('delivery-notes/<int:pk>/recall-bale/', views.recall_bale, name='recall_bale'),
