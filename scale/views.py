@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.http import HttpResponseForbidden, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from users.views import is_admin 
 from .models import Scale, WeighingProcess, Product, DeliveryNote, WeighingRecord, CompanySettings, Driver, Truck, Trailer
 from .forms import ScaleForm, WeighingProcessForm, ProductForm, DeliveryNoteForm, CompanySettingsForm, DriverForm, TruckForm, TrailerForm
@@ -16,6 +17,7 @@ import random
 import xmlrpc.client
 import socket
 from datetime import datetime
+import re
 
 # Scale Management Views
 @login_required
@@ -75,8 +77,6 @@ def scale_delete(request, pk):
     return redirect('scale:scale_detail', pk=pk)
 
 
-@login_required
-# @user_passes_test(is_admin)
 @login_required
 def connect_scale_view(request, scale_id):
     if request.method == 'POST':
@@ -189,76 +189,96 @@ def connect_scale(scale):
 ###################################################################################################
 #  Get Weight
 @login_required
-@user_passes_test(is_admin)
 def get_weight(request, scale_id):
     if request.method == 'POST':
-        print(f"Getting weight for scale {scale_id}")
-        weight = random.randint(30, 100)
-        print(f"Weight: {weight}")
-        return JsonResponse({
-            'success': True,
-            'weight': weight
-        })
-        
-    # try:
-    #     scale = get_object_or_404(Scale, pk=scale_id)
-        
-    #     # Check if scale is connected
-    #     if scale.last_connection_status != "connected":
-    #         return JsonResponse({
-    #             'success': False,
-    #             # 'message': 'Scale is not connected. Please connect the scale first.'
-    #         })
-        
-    #     # Try to read from the scale
-    #     ser = None
-    #     try:
-    #         ser = serial.Serial(scale.com_port, 9600, timeout=2)
-    #         if ser.is_open:
-    #             # Send command to get weight (this may vary by scale model)
-    #             ser.write(b"\r\n")  # Some scales need a CR/LF to trigger reading
-    #             # Read response
-    #             line = ser.readline()
-    #             # weight_str = line.decode(errors='ignore').strip()
-    #             # weight_str = line.decode('utf-8')[7: 14].strip()
-    #             # weight_str = line.decode('utf-8')[0: 5].strip()
-    #             weight_str = line.decode('utf-8')[4: 8].strip()
+        try:
+            scale = get_object_or_404(Scale, pk=scale_id)
+            
+            # Check if scale is connected
+            if scale.last_connection_status != "connected":
+                return JsonResponse({
+                    'success': False,
+                    # 'message': 'Scale is not connected. Please connect the scale first.'
+                })
+            
+            # Try to read from the scale
+            ser = None
+            try:
+                ser = serial.Serial(scale.com_port, 9600, timeout=2)
+                if ser.is_open:
+                    # Send command to get weight (this may vary by scale model)
+                    ser.write(b"\r\n")  # Some scales need a CR/LF to trigger reading
+                    # Read response
+                    line = ser.readline()
+                    # Decode bytes
+                    try:
+                        decoded = line.decode('utf-8', errors='ignore')
+                    except Exception:
+                        decoded = line.decode(errors='ignore')
 
-    #             print('Weight String: ', weight_str)
-                
-    #             # Parse weight (this parsing logic may need to be adjusted based on your scale's output format)
-    #             try:
-    #                 weight_str = weight_str.replace(',', '')
-    #                 weight = float(weight_str)
-    #                 return JsonResponse({
-    #                     'success': True,
-    #                     'weight': weight
-    #                 })
-    #             except ValueError:
-    #                 return JsonResponse({
-    #                     'success': False,
-    #                     'message': f'Could not parse weight value from scale: {weight_str}'
-    #                 })
+                    # Map presets to slice ranges
+                    preset_map = {
+                        '0:7': (0, 7),
+                        '4:8': (4, 8),
+                        '7:14': (7, 14),
+                        'full': (None, None),
+                    }
+                    if scale.decode_preset in preset_map:
+                        p_start, p_end = preset_map[scale.decode_preset]
+                        start = 0 if p_start is None else p_start
+                        end = None if p_end is None else p_end
+                    else:
+                        # Safe default when no preset selected
+                        start, end = 0, 7
+                    slice_str = decoded[start:end] if end is not None else decoded[start:]
+                    candidate = slice_str.strip("\r\n ,")
+
+                    print('Weight String: ', candidate)
                     
-    #     except serial.SerialException as e:
-    #         return JsonResponse({
-    #             'success': False,
-    #             'message': f'Error reading from scale: {str(e)}'
-    #         })
-    #     finally:
-    #         if ser and ser.is_open:
-    #             ser.close()
-                
-    # except Exception as e:
-    #     return JsonResponse({
-    #         'success': False,
-    #         'message': str(e)
-    #     })
+                    # Parse numeric weight robustly (handles prefixes/suffixes like 'ww' and 'kg')
+                    numeric_match = re.search(r'[-+]?\d+(?:[.,]\d+)?', candidate)
+                    if not numeric_match:
+                        # Fallback to search the full decoded string
+                        numeric_match = re.search(r'[-+]?\d+(?:[.,]\d+)?', decoded)
+
+                    if numeric_match:
+                        num_str = numeric_match.group(0).replace(',', '')
+                        try:
+                            weight = float(num_str)
+                            return JsonResponse({
+                                'success': True,
+                                'weight': weight
+                            })
+                        except ValueError:
+                            return JsonResponse({
+                                'success': False,
+                                'message': f'Could not parse numeric weight: {num_str}'
+                            })
+                    else:
+                        return JsonResponse({
+                            'success': False,
+                            'message': f'No numeric weight found in: {candidate or decoded}'
+                        })
+                        
+            except serial.SerialException as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Error reading from scale: {str(e)}'
+                })
+            finally:
+                if ser and ser.is_open:
+                    ser.close()
+                    
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': str(e)
+            })
     
-    # return JsonResponse({
-    #     'success': False,
-    #     'message': 'Only POST requests are allowed.'
-    # })
+    return JsonResponse({
+        'success': False,
+        'message': 'Only POST requests are allowed.'
+    })
 
 
 
@@ -379,7 +399,8 @@ def weighing_station(request):
             unit_of_measure = request.POST.get('unit_of_measure', 'kg')
             notes = request.POST.get('notes', '')
             barcode = request.POST.get('barcode', '')
-            
+            weighing_record_id = request.POST.get('weighing_record_id') # Get the ID for update
+
             # Round net weight to the nearest weight_rounding
             # net_weight = round(float(net_weight), weight_rounding)
 
@@ -414,14 +435,17 @@ def weighing_station(request):
                     delivery_note = get_object_or_404(DeliveryNote, pk=delivery_note_id)
                     
                     # Verify this barcode belongs to this delivery note
-                    if barcode and not delivery_note.can_accept_barcode(barcode):
-                        if delivery_note.is_scanning_complete():
-                            messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
-                        elif delivery_note.has_barcode_been_scanned(barcode):
-                            messages.error(request, f'Bale {barcode} has already been scanned for delivery note {delivery_note.delivery_note_number}.')
-                        else:
-                            messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
-                        return redirect('scale:weighing_station')
+                    if barcode:
+                        if delivery_note.has_barcode_been_scanned(barcode):
+                            # This is a rescan/update, allow it to proceed
+                            pass
+                        elif not delivery_note.can_accept_barcode(barcode):
+                            # This is a new scan, but it's not valid
+                            if delivery_note.is_scanning_complete():
+                                messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
+                            else:
+                                messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
+                            return redirect('scale:weighing_station')
                         
                 elif barcode:
                     # No active delivery note, search by barcode
@@ -435,11 +459,12 @@ def weighing_station(request):
                     
                     if found_delivery_note:
                         # Check if this delivery note can accept this barcode
-                        if not found_delivery_note.can_accept_barcode(barcode):
+                        if found_delivery_note.has_barcode_been_scanned(barcode):
+                            # This is a rescan/update, allow it to proceed
+                            pass
+                        elif not found_delivery_note.can_accept_barcode(barcode):
                             if found_delivery_note.is_scanning_complete():
                                 messages.error(request, f'Delivery note {found_delivery_note.delivery_note_number} is already complete.')
-                            elif found_delivery_note.has_barcode_been_scanned(barcode):
-                                messages.error(request, f'Bale {barcode} has already been scanned for delivery note {found_delivery_note.delivery_note_number}.')
                             else:
                                 messages.error(request, f'Barcode {barcode} not found in delivery note {found_delivery_note.delivery_note_number}.')
                             return redirect('scale:weighing_station')
@@ -522,21 +547,43 @@ def weighing_station(request):
                         barcode=barcode
                     )
             else:
-                # Create new record as normal (not weighbridge or no delivery note)
-                weighing_record = WeighingRecord.objects.create(
-                    scale_id=scale_id,
-                    product_id=product_id,
-                    process_id=process_id,
-                    user=request.user,
-                    gross_weight=gross_weight,
-                    tare_weight=tare_weight,
-                    net_weight=net_weight,
-                    unit_of_measure=unit_of_measure,
-                    notes=notes,
-                    custom_data=custom_data,
-                    delivery_note=delivery_note,
-                    barcode=barcode
-                )
+                # For CTL workflow, check for existing record to update. Otherwise, create new.
+                existing_record = None
+                if process.process_type == 'ctl_workflow' and delivery_note and barcode:
+                    existing_record = WeighingRecord.objects.filter(barcode=barcode, delivery_note=delivery_note).first()
+                
+                if existing_record:
+                    # Update existing record
+                    existing_record.scale = get_object_or_404(Scale, pk=scale_id)
+                    existing_record.product = get_object_or_404(Product, pk=product_id)
+                    existing_record.process = process
+                    existing_record.user = request.user
+                    existing_record.gross_weight = gross_weight
+                    existing_record.tare_weight = tare_weight
+                    existing_record.net_weight = net_weight
+                    existing_record.unit_of_measure = unit_of_measure
+                    existing_record.notes = notes
+                    existing_record.custom_data = custom_data
+                    existing_record.is_synced = False  # Mark for resync
+                    existing_record.save()
+                    weighing_record = existing_record
+                    messages.success(request, f'Weight for bale {barcode} updated successfully.')
+                else:
+                    # Create new record as normal
+                    weighing_record = WeighingRecord.objects.create(
+                        scale_id=scale_id,
+                        product_id=product_id,
+                        process_id=process_id,
+                        user=request.user,
+                        gross_weight=gross_weight,
+                        tare_weight=tare_weight,
+                        net_weight=net_weight,
+                        unit_of_measure=unit_of_measure,
+                        notes=notes,
+                        custom_data=custom_data,
+                        delivery_note=delivery_note,
+                        barcode=barcode
+                    )
             
             # Handle CTL Workflow completion logic
             if process.process_type == 'ctl_workflow' and weighing_record and delivery_note:
@@ -550,9 +597,9 @@ def weighing_station(request):
                 
                 # Check if scanning is complete
                 if delivery_note.is_scanning_complete():
-                    delivery_note.is_being_scanned = False
+                    # Do not set is_being_scanned = False here. User must confirm closure.
                     delivery_note.save()
-                    messages.success(request, f'Delivery note {delivery_note.delivery_note_number} scanning completed! All {delivery_note.get_bale_count()} bales have been scanned.')
+                    messages.success(request, f'Delivery note {delivery_note.delivery_note_number} scanning completed! All {delivery_note.get_bale_count()} bales have been scanned. Please confirm closure.')
                 else:
                     remaining = delivery_note.get_remaining_bales_count()
                     messages.success(request, f'Bale scanned successfully. {remaining} bales remaining for delivery note {delivery_note.delivery_note_number}.')
@@ -585,6 +632,9 @@ def weighing_station(request):
     
     # Get currently active delivery note for CTL workflow
     active_delivery_note = DeliveryNote.objects.filter(is_being_scanned=True).first()
+    
+    if active_delivery_note:
+        active_delivery_note.scanned_records_data = active_delivery_note.get_scanned_records_data()
     
     context = {
         'scales': scales,
@@ -951,6 +1001,31 @@ def delivery_note_suspend(request, pk):
             return JsonResponse({
                 'success': False,
                 'message': f'Delivery note {delivery_note.delivery_note_number} is not currently being scanned.'
+            })
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request method.'})
+
+@login_required
+@user_passes_test(is_admin)
+def close_delivery_note(request, pk):
+    """Explicitly close a delivery note after user confirmation."""
+    if request.method == 'POST':
+        delivery_note = get_object_or_404(DeliveryNote, pk=pk)
+        
+        # Only close if it's currently being scanned (i.e., ready for closure)
+        if delivery_note.is_being_scanned:
+            delivery_note.is_being_scanned = False
+            delivery_note.status = 'Closed' # Assuming 'Closed' is a valid status
+            delivery_note.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Delivery note {delivery_note.delivery_note_number} has been successfully closed.'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': f'Delivery note {delivery_note.delivery_note_number} is not in a state to be closed.'
             })
     
     return JsonResponse({'success': False, 'message': 'Invalid request method.'})
@@ -1829,11 +1904,9 @@ def find_delivery_note_by_barcode(request):
                             'success': False, 
                             'message': f'Delivery note {dnote.delivery_note_number} is already complete'
                         })
+                    # Allow re-scans by checking this after can_accept_barcode
                     elif dnote.has_barcode_been_scanned(barcode):
-                        return JsonResponse({
-                            'success': False, 
-                            'message': f'Bale {barcode} has already been scanned for delivery note {dnote.delivery_note_number}'
-                        })
+                        pass # This is a re-scan, so we allow it
                     else:
                         return JsonResponse({
                             'success': False, 
@@ -1858,7 +1931,7 @@ def find_delivery_note_by_barcode(request):
                         'grower_number': dnote.get_grower_number(),
                         'total_bales': dnote.get_bale_count(),
                         'scanned_bales': dnote.scanned_bales_count,
-                        'scanned_barcodes': dnote.scanned_barcodes,
+                        'scanned_records_data': dnote.get_scanned_records_data(),
                         'remaining_bales': dnote.get_remaining_bales_count(),
                         'location_name': dnote.get_location_name(),
                         'selling_point_name': dnote.get_selling_point_name(),
@@ -1916,6 +1989,75 @@ def driver_create_ajax(request):
             'message': f'Error creating driver: {str(e)}'
         })  
         
+@login_required
+def recall_bale_weighing_station(request):
+    """
+    Handle bale recall from the weighing station.
+    This will set the bale's mass to 0 in Odoo and remove it from local records.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method'})
+
+    try:
+        barcode = request.POST.get('barcode', '').strip()
+        delivery_note_id = request.POST.get('delivery_note_id')
+
+        if not all([barcode, delivery_note_id]):
+            return JsonResponse({'success': False, 'message': 'Barcode and Delivery Note ID are required.'})
+
+        delivery_note = get_object_or_404(DeliveryNote, pk=delivery_note_id)
+
+        # Check if the bale has been scanned for this delivery note
+        if not delivery_note.has_barcode_been_scanned(barcode):
+            return JsonResponse({'success': False, 'message': 'This bale has not been scanned yet.'})
+
+        # Communicate with ERP to set mass to 0
+        company_settings = CompanySettings.objects.first()
+        if not company_settings or not company_settings.api_url:
+            return JsonResponse({'success': False, 'message': 'ERP settings not configured.'})
+
+        # Assuming a similar API endpoint as the other recall function
+        api_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0"
+        
+        # Using requests to communicate with the ERP
+        response = requests.post(api_url, timeout=10) # Consider adding auth if needed
+
+        if response.status_code == 200:
+            # If ERP update is successful, recall the bale locally
+            if delivery_note.recall_bale(barcode):
+                dnote_closed = False
+                if delivery_note.scanned_bales_count == 0:
+                    delivery_note.is_being_scanned = False
+                    delivery_note.save()
+                    dnote_closed = True
+
+                response_data = {
+                    'success': True,
+                    'message': f'Bale {barcode} has been successfully recalled.',
+                    'delivery_note': {
+                        'scanned_bales': delivery_note.scanned_bales_count,
+                        'total_bales': delivery_note.get_bale_count(),
+                        'scanned_records_data': delivery_note.get_scanned_records_data(),
+                    },
+                    'dnote_closed': dnote_closed
+                }
+                if dnote_closed:
+                    response_data['message'] = 'All bales recalled. Delivery note is no longer active.'
+                
+                return JsonResponse(response_data)
+            else:
+                # This case might occur if there's a race condition
+                return JsonResponse({'success': False, 'message': 'Failed to recall bale locally.'})
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': f'Failed to update bale in ERP. Status: {response.status_code}, Response: {response.text}'
+            })
+
+    except requests.RequestException as e:
+        return JsonResponse({'success': False, 'message': f'Error communicating with ERP: {str(e)}'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'An unexpected error occurred: {str(e)}'})
         
 
 @login_required

@@ -47,6 +47,7 @@ urlpatterns = [
     path('delivery-notes/<int:pk>/', views.delivery_note_detail, name='delivery_note_detail'),
     path('delivery-notes/<int:pk>/edit/', views.delivery_note_edit, name='delivery_note_edit'),
     path('delivery-notes/<int:pk>/delete/', views.delivery_note_delete, name='delivery_note_delete'),
+    path('delivery-notes/<int:pk>/close/', views.close_delivery_note, name='close_delivery_note'),
     path('delivery-notes/<int:pk>/suspend/', views.delivery_note_suspend, name='delivery_note_suspend'),
     path('delivery-notes/<int:pk>/recall-bales/', views.delivery_note_bale_recall, name='delivery_note_bale_recall'),
     path('delivery-notes/<int:pk>/recall-bale/', views.recall_bale, name='recall_bale'),
@@ -56,6 +57,7 @@ urlpatterns = [
     
     # Weighing Station URLs
     path('weighing-station/', views.weighing_station, name='weighing_station'),
+    path('weighing-station/recall-bale/', views.recall_bale_weighing_station, name='recall_bale_weighing_station'),
     path('scales/<int:scale_id>/get-weight/', views.get_weight, name='get_weight'),
     path('weighing-records/sync-all-unsynced/', views.sync_all_unsynced, name='sync_all_unsynced'),
     

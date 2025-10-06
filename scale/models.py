@@ -22,6 +22,14 @@ class Scale(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     tare_weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    # Per-scale decoding configuration (preset only)
+    DECODE_PRESET_CHOICES = [
+        ('0:7', '[0:7]'),
+        ('4:8', '[4:8]'),
+        ('7:14', '[7:14]'),
+        ('full', 'Full string'),
+    ]
+    decode_preset = models.CharField(max_length=20, choices=DECODE_PRESET_CHOICES, blank=True, null=True, help_text="Predefined slice for decoding the scale output")
     
     def __str__(self):
         return f"{self.name} ({self.model_number})"
@@ -151,6 +159,37 @@ class DeliveryNote(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, blank=True, null=True)
     
     
+    def get_scanned_records_data(self):
+        """
+        Returns a list of dictionaries: [{'barcode': '...', 'weight_display': '...kg'}]
+        for all scanned barcodes associated with this delivery note, ordered by scan time.
+        """
+        # Get all WeighingRecords for this delivery note that have a barcode
+        # We use .values() for efficiency and order by timestamp to prioritize the latest record
+        # if a barcode somehow has multiple records (though logic should prevent this)
+        records = WeighingRecord.objects.filter(
+            delivery_note=self,
+            barcode__in=self.scanned_barcodes
+        ).values('barcode', 'net_weight', 'unit_of_measure').order_by('timestamp')
+        
+        # Create a map for quick lookup, prioritizing the latest record if duplicates exist
+        barcode_map = {}
+        for record in records:
+            # Format net_weight to one decimal place (e.g., 14.2kg)
+            net_weight_str = f"{record['net_weight']:.1f}{record['unit_of_measure']}"
+            barcode_map[record['barcode']] = net_weight_str
+        
+        # Re-order the results based on the original scanned_barcodes list order
+        result = []
+        for barcode in self.scanned_barcodes:
+            if barcode in barcode_map:
+                result.append({
+                    'barcode': barcode,
+                    'weight_display': barcode_map[barcode]
+                })
+        
+        return result
+
     def save(self, *args, **kwargs):
         # Generate QR code if it doesn't exist on save
         if not self.qr_code or self.pk is None:
@@ -276,6 +315,30 @@ class DeliveryNote(models.Model):
             self.scanned_bales_count += 1
             return True  # New barcode added
         return False  # Already existed
+
+    def recall_bale(self, barcode):
+        """
+        Recalls a bale by removing its barcode from the scanned list,
+        decrementing the scanned count, and deleting the weighing record.
+        """
+        trimmed_barcode = str(barcode).strip() if barcode else ''
+        if self.has_barcode_been_scanned(trimmed_barcode):
+            # Remove the barcode
+            self.scanned_barcodes = [b for b in self.scanned_barcodes if str(b).strip() != trimmed_barcode]
+            
+            # Decrement the count
+            if self.scanned_bales_count > 0:
+                self.scanned_bales_count -= 1
+            
+            # Delete the corresponding weighing record
+            WeighingRecord.objects.filter(
+                delivery_note=self,
+                barcode=trimmed_barcode
+            ).delete()
+            
+            self.save()
+            return True  # Recall was successful
+        return False  # Barcode was not found or not scanned
     
 
 class ErpSystem(models.Model):

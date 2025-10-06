@@ -149,6 +149,17 @@
                 {% endif %}
             </div>
 
+            <!-- Decode Preset -->
+            <div>
+                <label for="{{ form.decode_preset.id_for_label }}" class="block text-sm font-medium text-zinc-700">Decode Preset</label>
+                <div class="mt-1">
+                    {{ form.decode_preset }}
+                </div>
+                {% if form.decode_preset.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.decode_preset.errors }}</p>
+                {% endif %}
+            </div>
+
             <!-- Status -->
             <div>
                 <div class="flex items-center mt-5">
