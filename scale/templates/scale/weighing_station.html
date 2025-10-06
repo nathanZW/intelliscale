@@ -28,6 +28,7 @@
 
 <form id="weighing-form" method="post" action="{% url 'scale:weighing_station' %}">
     {% csrf_token %}
+    <input type="hidden" id="weighing-record-id" name="weighing_record_id" value="">
     <div class="grid grid-cols-5 gap-6">
         <!-- Left column - Machine/Weighing Data (60%) -->
         <div class="col-span-3 space-y-6">
@@ -851,10 +852,14 @@
         tareWeightInput.addEventListener('input', calculateNetWeight);
         grossWeightInput.addEventListener('input', calculateNetWeight);
         
+        // Global constant for weight rounding, safely defaulted to 0
+        const WEIGHT_ROUNDING = {% if processes %}{{ processes.0.weight_rounding|default:0 }}{% else %}0{% endif %};
+        console.log('Global Weight Rounding: ', WEIGHT_ROUNDING);
+        
         function calculateNetWeight() {
             const grossWeight = parseFloat(grossWeightInput.value) || 0;
             const tareWeight = parseFloat(tareWeightInput.value) || 0;
-            const weightRounding = {{ processes.0.weight_rounding|default:0 }};
+            const weightRounding = WEIGHT_ROUNDING;
             console.log('Weight Rounding: ', weightRounding);
             const netWeight = Math.max(0, grossWeight - tareWeight);
             netWeightInput.value = netWeight.toFixed(weightRounding);
@@ -2058,6 +2063,8 @@
         cancelRecallBtn.addEventListener('click', hideRecallModal);
 
         updateWeightBtn.addEventListener('click', function() {
+            hideRecallModal(); // Close the modal immediately
+
             if (deliveryNoteForUpdate) {
                 updateActiveDeliveryNoteDisplay(deliveryNoteForUpdate);
                 showNotification('Please proceed with the new weight measurement.', 'info');
@@ -2068,9 +2075,9 @@
                 if (recordToUpdate) {
                     // Populate gross weight with the existing weight of the bale
                     document.getElementById('gross-weight').value = recordToUpdate.weight;
-                    document.getElementById('net-weight-display').textContent = recordToUpdate.weight.toFixed({{ processes.0.weight_rounding|default:0 }});
-                    document.getElementById('net-weight').value = recordToUpdate.weight.toFixed({{ processes.0.weight_rounding|default:0 }});
-                    document.getElementById('header-net-value').textContent = recordToUpdate.weight.toFixed({{ processes.0.weight_rounding|default:0 }});
+                    document.getElementById('net-weight-display').textContent = recordToUpdate.weight.toFixed(WEIGHT_ROUNDING);
+                    document.getElementById('net-weight').value = recordToUpdate.weight.toFixed(WEIGHT_ROUNDING);
+                    document.getElementById('header-net-value').textContent = recordToUpdate.weight.toFixed(WEIGHT_ROUNDING);
 
                     // Store the ID of the record being updated
                     document.getElementById('weighing-record-id').value = recordToUpdate.id;
@@ -2082,14 +2089,15 @@
 
                     // Update the save button to indicate an update operation
                     const saveBtn = document.getElementById('save-btn');
-                    saveBtn.textContent = 'Update Weight';
-                    saveBtn.classList.remove('bg-zinc-900', 'hover:bg-zinc-900/90');
-                    saveBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    if (saveBtn) { // Added null check
+                        saveBtn.textContent = 'Update Weight';
+                        saveBtn.classList.remove('bg-zinc-900', 'hover:bg-zinc-900/90');
+                        saveBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }
 
                     calculateNetWeight(); // Recalculate net weight based on the pre-filled gross weight
                 }
             }
-            hideRecallModal();
         });
 
         confirmRecallBtn.addEventListener('click', function() {
