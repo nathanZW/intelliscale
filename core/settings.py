@@ -111,9 +111,11 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+#note weighing records display timestamp 2 hours behind when using UTC
+TIME_ZONE = 'Africa/Harare' #'UTC'
 
-USE_I18N = True
+USE_L10N = True
+#USE_I18N = True
 
 USE_TZ = True
 
