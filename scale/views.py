@@ -441,7 +441,11 @@ def weighing_station(request):
                             pass
                         elif not delivery_note.can_accept_barcode(barcode):
                             # This is a new scan, but it's not valid
-                            if delivery_note.is_scanning_complete():
+                            # Check if this is just a rescan of an already-scanned barcode from the same delivery note
+                            if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
+                                # This barcode belongs to this delivery note, allow rescan/update
+                                pass
+                            elif delivery_note.is_scanning_complete():
                                 messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
                             else:
                                 messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
@@ -463,7 +467,11 @@ def weighing_station(request):
                             # This is a rescan/update, allow it to proceed
                             pass
                         elif not found_delivery_note.can_accept_barcode(barcode):
-                            if found_delivery_note.is_scanning_complete():
+                            # Check if this is just a rescan of an already-scanned barcode from the same delivery note
+                            if found_delivery_note.is_scanning_complete() and found_delivery_note.find_bale_by_barcode(barcode):
+                                # This barcode belongs to this delivery note, allow rescan/update
+                                pass
+                            elif found_delivery_note.is_scanning_complete():
                                 messages.error(request, f'Delivery note {found_delivery_note.delivery_note_number} is already complete.')
                             else:
                                 messages.error(request, f'Barcode {barcode} not found in delivery note {found_delivery_note.delivery_note_number}.')
@@ -1927,7 +1935,11 @@ def find_delivery_note_by_barcode(request):
                 
                 # Check if this specific delivery note can accept this barcode
                 if not dnote.can_accept_barcode(barcode):
-                    if dnote.is_scanning_complete():
+                    # Check if this is just a rescan of an already-scanned barcode from the same delivery note
+                    if dnote.is_scanning_complete() and dnote.find_bale_by_barcode(barcode):
+                        # This barcode belongs to this delivery note, allow rescan/update
+                        pass
+                    elif dnote.is_scanning_complete():
                         return JsonResponse({
                             'success': False, 
                             'message': f'Delivery note {dnote.delivery_note_number} is already complete'

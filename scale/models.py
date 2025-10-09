@@ -187,6 +187,23 @@ class DeliveryNote(models.Model):
                     'barcode': barcode,
                     'weight_display': barcode_map[barcode]
                 })
+            else:
+                # If no weighing record exists, check if we can get weight data from odoo_data
+                bale_info = self.find_bale_by_barcode(barcode)
+                if bale_info and 'weight' in bale_info:
+                    weight = bale_info['weight']
+                    unit = bale_info.get('unit_of_measure', 'kg')  # Default to kg if not specified
+                    result.append({
+                        'barcode': barcode,
+                        'weight_display': f"{weight}{unit}"
+                    })
+                else:
+                    # This might happen if there was an error creating the weighing record
+                    # Default to 0.0kg, though ideally all scanned barcodes should have weighing records
+                    result.append({
+                        'barcode': barcode,
+                        'weight_display': 'Pending'
+                    })
         
         return result
 
