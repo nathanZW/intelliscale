@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.http import HttpResponseForbidden, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from users.views import is_admin 
-from .models import Scale, WeighingProcess, Product, DeliveryNote, WeighingRecord, CompanySettings, Driver, Truck, Trailer
+from .models import Scale, WeighingProcess, Product, DeliveryNote, WeighingRecord, CompanySettings, Driver, Truck, Trailer, ScaleIdHistory
 from .forms import ScaleForm, WeighingProcessForm, ProductForm, DeliveryNoteForm, CompanySettingsForm, DriverForm, TruckForm, TrailerForm
 import serial
 import serial.tools.list_ports
@@ -30,7 +30,8 @@ def scale_list(request):
 @user_passes_test(is_admin)
 def scale_detail(request, pk):
     scale = get_object_or_404(Scale, pk=pk)
-    return render(request, 'scale/scale_detail.html', {'scale': scale})
+    history = ScaleIdHistory.objects.filter(scale=scale)
+    return render(request, 'scale/scale_detail.html', {'scale': scale, 'history': history})
 
 @login_required
 @user_passes_test(is_admin)
@@ -50,10 +51,19 @@ def scale_create(request):
 @user_passes_test(is_admin)
 def scale_edit(request, pk):
     scale = get_object_or_404(Scale, pk=pk)
+    old_scale_id = scale.scale_id
     
     if request.method == 'POST':
         form = ScaleForm(request.POST, instance=scale)
         if form.is_valid():
+            new_scale_id = form.cleaned_data['scale_id']
+            if old_scale_id != new_scale_id:
+                ScaleIdHistory.objects.create(
+                    scale=scale,
+                    changed_by=request.user,
+                    old_id=old_scale_id,
+                    new_id=new_scale_id
+                )
             scale = form.save()
             messages.success(request, f'Scale {scale.name} was updated successfully.')
             return redirect('scale:scale_detail', pk=scale.pk)
@@ -525,9 +535,9 @@ def weighing_station(request):
                     
                     messages.success(request, f'Tare weight updated for existing weighing record in delivery note {delivery_note.delivery_note_number}. Delivery note has been closed.')
                 else:
-                    # Create new record as normal (first weighing - gross weight)
                     weighing_record = WeighingRecord.objects.create(
-                        scale_id=scale_id,
+                        scale=scale,
+                        weighing_scale_id=scale.scale_id,
                         product_id=product_id,
                         process_id=process_id,
                         user=request.user,
@@ -549,6 +559,7 @@ def weighing_station(request):
                 if existing_record:
                     # Update existing record
                     existing_record.scale = get_object_or_404(Scale, pk=scale_id)
+                    existing_record.weighing_scale_id = existing_record.scale.scale_id
                     existing_record.product = get_object_or_404(Product, pk=product_id)
                     existing_record.process = process
                     existing_record.user = request.user
@@ -564,8 +575,10 @@ def weighing_station(request):
                     messages.success(request, f'Weight for bale {barcode} updated successfully.')
                 else:
                     # Create new record as normal
+                    scale = get_object_or_404(Scale, pk=scale_id)
                     weighing_record = WeighingRecord.objects.create(
-                        scale_id=scale_id,
+                        scale=scale,
+                        weighing_scale_id=scale.scale_id,
                         product_id=product_id,
                         process_id=process_id,
                         user=request.user,
@@ -600,7 +613,7 @@ def weighing_station(request):
             
             # Send barcode, mass and scale id to erp system (if record created successfully)
             if weighing_record:
-                send_to_erp(barcode, net_weight, scale_id, weighing_record.id, request, process.process_type)
+                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, process.process_type)
             
             print_after_save = request.POST.get('print_after_save') == 'true'
             
@@ -647,7 +660,7 @@ def weighing_station(request):
     return render(request, 'scale/weighing_station.html', context)
 
 
-def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, process_type=None):
+def send_to_erp(barcode, net_weight, weighing_scale_id, weighing_record_id, request, process_type=None):
     # Trim whitespace from barcode
     barcode = str(barcode).strip() if barcode else ''
 
@@ -752,7 +765,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, proc
         pass
     
         # print("Sending to erp system")
-        print(f"Sending barcode {barcode}, net weight {net_weight}, and scale id {scale_id} to erp system")
+        print(f"Sending barcode {barcode}, net weight {net_weight}, and scale id {weighing_scale_id} to erp system")
         # print('Session ID: ', session_id)
         # session_id = request.COOKIES.get('erp_session_id')
         # print('Session ID: ', session_id)
@@ -821,7 +834,7 @@ def sync_all_unsynced(request):
     weighing_records = WeighingRecord.objects.filter(is_synced=False)
     for weighing_record in weighing_records:
         print('Syncing weighing record: ', weighing_record.id)
-        send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.scale_id, weighing_record.id, request, weighing_record.process.process_type)
+        send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.process.process_type)
     return redirect('scale:weighing_record_list')
 
 
@@ -1185,7 +1198,7 @@ def weighing_record_list(request):
     
     # Apply filters if provided
     if scale_id:
-        records = records.filter(scale_id=scale_id)
+        records = records.filter(scale__scale_id=scale_id)
     
     if product_id:
         records = records.filter(product_id=product_id)

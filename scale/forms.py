@@ -35,18 +35,12 @@ class ScaleForm(forms.ModelForm):
         elif not self.instance.pk: # For new forms, default to 'Auto-detect'
             self.initial['com_port'] = ''
 
-        # Provide a safe initial for decode_preset if none selected
-        if not self.instance or not getattr(self.instance, 'decode_preset', None):
-            self.initial['decode_preset'] = '0:7'
-        # Make the field required so the blank (hyphens) option is not shown
-        if 'decode_preset' in self.fields:
-            self.fields['decode_preset'].required = True
-
 
     class Meta:
         model = Scale
         fields = [
             'name', 
+            'scale_id',
             'com_port',
             'baud_rate',
             'timeout',
@@ -60,13 +54,12 @@ class ScaleForm(forms.ModelForm):
             'last_connection_status',
             'last_seen',
             'tare_weight',
-            'decode_preset'
         ]
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'block w-full rounded-md border-zinc-800 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
             }),
-            'decode_preset': forms.Select(attrs={
+            'scale_id': forms.TextInput(attrs={
                 'class': 'block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
             }),
             'com_port': forms.TextInput(attrs={

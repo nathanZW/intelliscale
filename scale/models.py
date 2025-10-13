@@ -4,9 +4,11 @@ import qrcode
 from io import BytesIO
 from django.core.files import File
 from PIL import Image
+from django.conf import settings
 
 class Scale(models.Model):
     name = models.CharField(max_length=100)
+    scale_id = models.CharField(max_length=100, unique=True, blank=True, null=True, help_text="Unique identifier for the scale. Can be changed by an admin.")
     com_port = models.CharField(max_length=50, blank=True, null=True)
     baud_rate = models.IntegerField(default=9600)
     timeout = models.IntegerField(default=1)
@@ -22,17 +24,21 @@ class Scale(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     tare_weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    # Per-scale decoding configuration (preset only)
-    DECODE_PRESET_CHOICES = [
-        ('0:7', '[0:7]'),
-        ('4:8', '[4:8]'),
-        ('7:14', '[7:14]'),
-        ('full', 'Full string'),
-    ]
-    decode_preset = models.CharField(max_length=20, choices=DECODE_PRESET_CHOICES, blank=True, null=True, help_text="Predefined slice for decoding the scale output")
     
     def __str__(self):
         return f"{self.name} ({self.model_number})"
+
+
+class ScaleIdHistory(models.Model):
+    """Logs changes to the scale_id of a Scale."""
+    scale = models.ForeignKey(Scale, on_delete=models.CASCADE, related_name='id_history')
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    change_date = models.DateTimeField(auto_now_add=True)
+    old_id = models.CharField(max_length=100)
+    new_id = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ['-change_date']
     
     
 class WeighingProcess(models.Model):
@@ -76,6 +82,7 @@ class Product(models.Model):
 
 class WeighingRecord(models.Model):
     scale = models.ForeignKey(Scale, on_delete=models.CASCADE)
+    weighing_scale_id = models.CharField(max_length=100, blank=True, help_text="The ID of the scale at the time of weighing.")
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     process = models.ForeignKey(WeighingProcess, on_delete=models.CASCADE)
     barcode = models.CharField(max_length=100, blank=True)

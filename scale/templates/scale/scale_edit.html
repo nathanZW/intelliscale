@@ -28,6 +28,17 @@
                 {% endif %}
             </div>
 
+            <!-- Scale ID -->
+            <div>
+                <label for="{{ form.scale_id.id_for_label }}" class="block text-sm font-medium text-zinc-700">Scale ID</label>
+                <div class="mt-1">
+                    {{ form.scale_id }}
+                </div>
+                {% if form.scale_id.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.scale_id.errors }}</p>
+                {% endif %}
+            </div>
+
             <!-- COM Port -->
             <div>
                 <label for="{{ form.com_port.id_for_label }}" class="block text-sm font-medium text-zinc-700">COM Port</label>
