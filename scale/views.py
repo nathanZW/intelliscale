@@ -212,55 +212,40 @@ def get_weight(request, scale_id):
                     line = ser.readline()
                     # Decode bytes
                     try:
-                        decoded = line.decode('utf-8', errors='ignore')
+                        decoded = line.decode('utf-8', errors='ignore').strip()
                     except Exception:
-                        decoded = line.decode(errors='ignore')
+                        decoded = line.decode(errors='ignore').strip()
 
-                    # Map presets to slice ranges
-                    preset_map = {
-                        '0:7': (0, 7),
-                        '4:8': (4, 8),
-                        '7:14': (7, 14),
-                        'full': (None, None),
-                    }
-                    if scale.decode_preset in preset_map:
-                        p_start, p_end = preset_map[scale.decode_preset]
-                        start = 0 if p_start is None else p_start
-                        end = None if p_end is None else p_end
-                    else:
-                        # Safe default when no preset selected
-                        start, end = 0, 7
-                    slice_str = decoded[start:end] if end is not None else decoded[start:]
-                    candidate = slice_str.strip("\r\n ,")
+                    print(f"Raw data from scale {scale.name}: '{decoded}'")
 
-                    print('Weight String: ', candidate)
-                    
-                    # Parse numeric weight robustly (handles prefixes/suffixes like 'ww' and 'kg')
-                    numeric_match = re.search(r'[-+]?\d+(?:[.,]\d+)?', candidate)
-                    if not numeric_match:
-                        # Fallback to search the full decoded string
-                        numeric_match = re.search(r'[-+]?\d+(?:[.,]\d+)?', decoded)
+                    # Attempt to parse numeric weight from decoded string
+                    # robustly looks for a number which may include decimal points or commas instead of using slices 
+                    numeric_match = re.search(r'[-+]?\d+(?:[.,]\d+)?', decoded)
 
                     if numeric_match:
                         num_str = numeric_match.group(0).replace(',', '')
                         try:
                             weight = float(num_str)
+                            print(f"Successfully parsed weight for scale {scale.name}: {weight}")
                             return JsonResponse({
                                 'success': True,
                                 'weight': weight
                             })
                         except ValueError:
+                            print(f"Could not parse numeric weight from '{num_str}' for scale {scale.name}")
                             return JsonResponse({
                                 'success': False,
                                 'message': f'Could not parse numeric weight: {num_str}'
                             })
                     else:
+                        print(f"No numeric weight found in '{decoded}' for scale {scale.name}")
                         return JsonResponse({
                             'success': False,
-                            'message': f'No numeric weight found in: {candidate or decoded}'
+                            'message': f'No numeric weight found in: {decoded}'
                         })
                         
             except serial.SerialException as e:
+                print(f"SerialException for scale {scale.name}: {str(e)}")
                 return JsonResponse({
                     'success': False,
                     'message': f'Error reading from scale: {str(e)}'
@@ -270,6 +255,7 @@ def get_weight(request, scale_id):
                     ser.close()
                     
         except Exception as e:
+            print(f"General exception in get_weight for scale {scale_id}: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'message': str(e)
