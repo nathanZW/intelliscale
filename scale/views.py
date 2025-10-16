@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
@@ -394,7 +395,7 @@ def weighing_station(request):
             net_weight = request.POST.get('net_weight', '0')
             unit_of_measure = request.POST.get('unit_of_measure', 'kg')
             notes = request.POST.get('notes', '')
-            barcode = request.POST.get('barcode', '')
+            barcode = request.POST.get('barcode', '').strip()
             weighing_record_id = request.POST.get('weighing_record_id') # Get the ID for update
 
             # Round net weight to the nearest weight_rounding
@@ -425,74 +426,76 @@ def weighing_station(request):
             
             # Handle CTL Workflow logic
             if process.process_type == 'ctl_workflow':
-                # Check if we have an active delivery note from the form
-                if delivery_note_id:
-                    # Use the active delivery note from the form
-                    delivery_note = get_object_or_404(DeliveryNote, pk=delivery_note_id)
-                    
-                    # Verify this barcode belongs to this delivery note
-                    if barcode:
-                        if delivery_note.has_barcode_been_scanned(barcode):
-                            # This is a rescan/update, allow it to proceed
-                            pass
-                        elif not delivery_note.can_accept_barcode(barcode):
-                            # This is a new scan, but it's not valid
-                            # Check if this is just a rescan of an already-scanned barcode from the same delivery note
-                            if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
-                                # This barcode belongs to this delivery note, allow rescan/update
+                with transaction.atomic():
+                    # Check if we have an active delivery note from the form
+                    if delivery_note_id:
+                        # Use the active delivery note from the form, and lock the row for update
+                        delivery_note = get_object_or_404(DeliveryNote.objects.select_for_update(), pk=delivery_note_id)
+                        
+                        # Verify this barcode belongs to this delivery note
+                        if barcode:
+                            if delivery_note.has_barcode_been_scanned(barcode):
+                                # This is a rescan/update, allow it to proceed
                                 pass
-                            elif delivery_note.is_scanning_complete():
-                                messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
-                            else:
-                                messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
-                            return redirect('scale:weighing_station')
+                            elif not delivery_note.can_accept_barcode(barcode):
+                                # This is a new scan, but it's not valid
+                                # Check if this is just a rescan of an already-scanned barcode from the same delivery note
+                                if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
+                                    # This barcode belongs to this delivery note, allow rescan/update
+                                    pass
+                                elif delivery_note.is_scanning_complete():
+                                    messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
+                                else:
+                                    messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
+                                return redirect('scale:weighing_station')
+                            
+                    elif barcode:
+                        # No active delivery note, search by barcode
+                        delivery_notes_with_barcode = DeliveryNote.objects.all()
+                        found_delivery_note = None
                         
-                elif barcode:
-                    # No active delivery note, search by barcode
-                    delivery_notes_with_barcode = DeliveryNote.objects.all()
-                    found_delivery_note = None
-                    
-                    for dnote in delivery_notes_with_barcode:
-                        if dnote.find_bale_by_barcode(barcode):
-                            found_delivery_note = dnote
-                            break
-                    
-                    if found_delivery_note:
-                        # Check if this delivery note can accept this barcode
-                        if found_delivery_note.has_barcode_been_scanned(barcode):
-                            # This is a rescan/update, allow it to proceed
-                            pass
-                        elif not found_delivery_note.can_accept_barcode(barcode):
-                            # Check if this is just a rescan of an already-scanned barcode from the same delivery note
-                            if found_delivery_note.is_scanning_complete() and found_delivery_note.find_bale_by_barcode(barcode):
-                                # This barcode belongs to this delivery note, allow rescan/update
+                        for dnote in delivery_notes_with_barcode:
+                            if dnote.find_bale_by_barcode(barcode):
+                                found_delivery_note = dnote
+                                break
+                        
+                        if found_delivery_note:
+                            # Lock the found delivery note for update
+                            delivery_note = DeliveryNote.objects.select_for_update().get(pk=found_delivery_note.pk)
+
+                            # Check if this delivery note can accept this barcode
+                            if delivery_note.has_barcode_been_scanned(barcode):
+                                # This is a rescan/update, allow it to proceed
                                 pass
-                            elif found_delivery_note.is_scanning_complete():
-                                messages.error(request, f'Delivery note {found_delivery_note.delivery_note_number} is already complete.')
-                            else:
-                                messages.error(request, f'Barcode {barcode} not found in delivery note {found_delivery_note.delivery_note_number}.')
+                            elif not delivery_note.can_accept_barcode(barcode):
+                                # Check if this is just a rescan of an already-scanned barcode from the same delivery note
+                                if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
+                                    # This barcode belongs to this delivery note, allow rescan/update
+                                    pass
+                                elif delivery_note.is_scanning_complete():
+                                    messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
+                                else:
+                                    messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
+                                return redirect('scale:weighing_station')
+                            
+                            # Activate this delivery note for scanning if not already active
+                            currently_scanned = DeliveryNote.objects.filter(is_being_scanned=True).exclude(pk=delivery_note.pk).first()
+                            if currently_scanned:
+                                messages.error(request, f'Another delivery note ({currently_scanned.delivery_note_number}) is currently being scanned.')
+                                return redirect('scale:weighing_station')
+                            
+                            if not delivery_note.is_being_scanned:
+                                # Deactivate any other delivery notes
+                                DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
+                                delivery_note.is_being_scanned = True
+                                delivery_note.save()
+                            
+                        else:
+                            messages.error(request, 'Barcode not found. Please scan the correct bale.')
                             return redirect('scale:weighing_station')
-                        
-                        # Activate this delivery note for scanning if not already active
-                        currently_scanned = DeliveryNote.objects.filter(is_being_scanned=True).first()
-                        if currently_scanned and currently_scanned.id != found_delivery_note.id:
-                            messages.error(request, f'Another delivery note ({currently_scanned.delivery_note_number}) is currently being scanned.')
-                            return redirect('scale:weighing_station')
-                        
-                        if not found_delivery_note.is_being_scanned:
-                            # Deactivate any other delivery notes
-                            DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
-                            found_delivery_note.is_being_scanned = True
-                            found_delivery_note.save()
-                        
-                        delivery_note = found_delivery_note
-                        
                     else:
-                        messages.error(request, 'Barcode not found. Please scan the correct bale.')
+                        messages.error(request, 'No barcode provided for CTL workflow.')
                         return redirect('scale:weighing_station')
-                else:
-                    messages.error(request, 'No barcode provided for CTL workflow.')
-                    return redirect('scale:weighing_station')
             elif delivery_note_id:
                 delivery_note = get_object_or_404(DeliveryNote, pk=delivery_note_id)
             
