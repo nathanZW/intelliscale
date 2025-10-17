@@ -61,6 +61,8 @@ class WeighingProcess(models.Model):
     weight_rounding = models.IntegerField(blank=True, null=True, choices=WEIGHT_ROUNDING_CHOICES, default=2)
     allow_manual_entry = models.BooleanField(default=False)
     process_type = models.CharField(max_length=100, blank=True, null=True, choices=[('WeighBridge', 'WeighBridge'),('Manual', 'Manual'), ('Automated', 'Automated'), ('ctl_workflow', 'CTL Workflow')], default='WeighBridge')
+    allow_marshalling = models.BooleanField(default=False)
+    allow_bale_insert = models.BooleanField(default=False)
     
     def __str__(self):
         return self.name

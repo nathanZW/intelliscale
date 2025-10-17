@@ -91,7 +91,7 @@
                 </div>
                 <div class="p-4 flex-grow overflow-auto">
                     <!-- Weighing Data Section -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label id="weight-label" class="block text-sm font-medium text-zinc-700 mb-1">Gross Weight</label>
                             <div class="flex">
@@ -101,7 +101,7 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="hidden">
+                        <div>
                             <label class="block text-sm font-medium text-zinc-700 mb-1">Tare Weight</label>
                             <div class="flex">
                                 <input type="number" id="tare-weight" name="tare_weight" readonly class="block w-full rounded-l-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2" placeholder="0.00" step="0.01">
@@ -730,6 +730,11 @@
                 document.getElementById('delivery-note-product-name').textContent = product.name;
                 document.getElementById('delivery-note-product-id').value = product.id;
             }
+            
+            // Update tare weight from the delivery note product
+            if (product.id) {
+                updateTareWeightFromProduct(product.id);
+            }
         }
 
         // Function to reset to default product
@@ -750,6 +755,11 @@
             const productIdInput = document.getElementById('product-id-input');
             if (productIdInput) {
                 document.getElementById('delivery-note-product-id').value = '';
+                
+                // Update tare weight from the default product
+                if (productIdInput.value) {
+                    updateTareWeightFromProduct(productIdInput.value);
+                }
             }
         }
 
@@ -854,6 +864,9 @@
         const WEIGHT_ROUNDING = {% if processes %}{{ processes.0.weight_rounding|default:0 }}{% else %}0{% endif %};
         console.log('Global Weight Rounding: ', WEIGHT_ROUNDING);
         
+        // Get product tare weights from the template context
+        const productTareWeights = {{ product_tare_weights|safe }};
+        
         function calculateNetWeight() {
             const grossWeight = parseFloat(grossWeightInput.value) || 0;
             const tareWeight = parseFloat(tareWeightInput.value) || 0;
@@ -867,6 +880,31 @@
             const headerNetValue = document.getElementById('header-net-value');
             if (headerTareValue) headerTareValue.textContent = tareWeight.toFixed(weightRounding);
             if (headerNetValue) headerNetValue.textContent = netWeight.toFixed(weightRounding);
+        }
+        
+        // Function to update tare weight based on selected product
+        function updateTareWeightFromProduct(productId) {
+            if (productTareWeights && productId) {
+                const tareWeight = productTareWeights[productId];
+                if (tareWeight !== undefined) {
+                    // Set the tare weight to the product's tare weight
+                    tareWeightInput.value = tareWeight.toFixed(WEIGHT_ROUNDING);
+                    // Update display elements
+                    const tareWeightDisplay = document.getElementById('tare-weight-display');
+                    if (tareWeightDisplay) {
+                        tareWeightDisplay.textContent = tareWeight.toFixed(WEIGHT_ROUNDING);
+                    }
+                    // Update header tare value
+                    const headerTareValue = document.getElementById('header-tare-value');
+                    if (headerTareValue) {
+                        headerTareValue.textContent = tareWeight.toFixed(WEIGHT_ROUNDING);
+                    }
+                    // Update the hidden tare weight field
+                    document.getElementById('tare-weight').value = tareWeight.toFixed(WEIGHT_ROUNDING);
+                    // Recalculate net weight
+                    calculateNetWeight();
+                }
+            }
         }
         
         // Update unit displays when unit is changed
@@ -1499,7 +1537,7 @@
                 
                 // Restore previously selected values
                 const lastScaleId = localStorage.getItem('lastScaleId');
-                //const lastProductId = localStorage.getItem('lastProductId');
+                const lastProductId = localStorage.getItem('lastProductId');
                 const lastProcessId = localStorage.getItem('lastProcessId');
                 
                 console.log('Restoring values:', {lastScaleId, lastProductId, lastProcessId});
@@ -1510,11 +1548,15 @@
                     scaleInfo.classList.remove('hidden');
                 }
                 
-               // if (lastProductId) {
-                    // productSelect.value = lastProductId;
-                    // Manually trigger product details display update
-                    // productDetails.classList.remove('hidden');
-                //}
+                if (lastProductId) {
+                    // Update product selection and tare weight
+                    const productIdInput = document.getElementById('product-id-input');
+                    if (productIdInput) {
+                        productIdInput.value = lastProductId;
+                    }
+                    // Update tare weight from the restored product
+                    updateTareWeightFromProduct(lastProductId);
+                }
                 
                 if (lastProcessId) {
                     processSelect.value = lastProcessId;
@@ -1671,6 +1713,12 @@
         updateWeightLabel(false);
         toggleLiveWeightDisplay();
         updateBarcodeRequirement();
+        
+        // Set tare weight from the default active product when page loads
+        const productIdInput = document.getElementById('product-id-input');
+        if (productIdInput && productIdInput.value) {
+            updateTareWeightFromProduct(productIdInput.value);
+        }
 
         // CTL Workflow Functions
         function updateDeliveryNoteVisibility() {
@@ -2093,7 +2141,14 @@
                         saveBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
                     }
 
-                    calculateNetWeight(); // Recalculate net weight based on the pre-filled gross weight
+                    // Calculate net weight based on the pre-filled gross weight
+                    calculateNetWeight();
+                    
+                    // Update tare weight from the active product if applicable
+                    const productIdInput = document.getElementById('product-id-input');
+                    if (productIdInput && productIdInput.value) {
+                        updateTareWeightFromProduct(productIdInput.value);
+                    }
                 }
             }
         });

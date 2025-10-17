@@ -106,9 +106,10 @@
             <a href="{% url 'scale:product_edit' product.id %}" class="inline-flex justify-center rounded-md border border-zinc-300 bg-white py-2 px-4 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                 Edit
             </a>
-            <a href="{% url 'scale:product_delete' product.id %}" class="inline-flex justify-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2" onclick="return confirm('Are you sure you want to delete this product?')">
-                Delete
-            </a>
+            <form method="post" action="{% url 'scale:product_delete' product.id %}" onsubmit="return confirm('Are you sure you want to delete this product?');" class="ml-2">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">Delete</button>
+            </form>
         </div>
     </div>
 </body>

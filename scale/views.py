@@ -646,6 +646,11 @@ def weighing_station(request):
     if active_delivery_note:
         active_delivery_note.scanned_records_data = active_delivery_note.get_scanned_records_data()
     
+    # Create a dictionary of product tare weights for the template
+    product_tare_weights = {}
+    for product in products:
+        product_tare_weights[product.id] = float(product.tare_weight or 0)
+    
     context = {
         'scales': scales,
         'products': products,
@@ -657,7 +662,8 @@ def weighing_station(request):
         'process_custom_fields': json.dumps(process_custom_fields),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
-        'active_delivery_note': active_delivery_note
+        'active_delivery_note': active_delivery_note,
+        'product_tare_weights': json.dumps(product_tare_weights)
     }
     
     return render(request, 'scale/weighing_station.html', context)

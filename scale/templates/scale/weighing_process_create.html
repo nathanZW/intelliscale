@@ -180,6 +180,30 @@
                         {% endif %}
                         <p class="mt-1 text-xs text-zinc-500">Allow manual entry for this process.</p>
                     </div>
+
+                    <!-- Allow Marshalling -->
+                    <div>
+                        <label for="{{ form.allow_marshalling.id_for_label }}" class="block text-sm font-medium text-zinc-700">Allow Marshalling</label>
+                        <div class="mt-1">
+                            {{ form.allow_marshalling }}
+                        </div>
+                        {% if form.allow_marshalling.errors %}
+                            <p class="mt-2 text-sm text-red-600">{{ form.allow_marshalling.errors }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-zinc-500">Allow marshalling for this process.</p>
+                    </div>
+
+                    <!-- Allow Bale Insert -->
+                    <div>
+                        <label for="{{ form.allow_bale_insert.id_for_label }}" class="block text-sm font-medium text-zinc-700">Allow Bale Insert</label>
+                        <div class="mt-1">
+                            {{ form.allow_bale_insert }}
+                        </div>
+                        {% if form.allow_bale_insert.errors %}
+                            <p class="mt-2 text-sm text-red-600">{{ form.allow_bale_insert.errors }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-zinc-500">Allow bale insert for this process.</p>
+                    </div>
                     
                     <!-- Status -->
                     <div>
