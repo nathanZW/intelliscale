@@ -545,6 +545,9 @@
         // Parse process custom fields data from the template
         const processCustomFields = JSON.parse('{{ process_custom_fields|escapejs }}');
         
+        // Parse process marshalling allowance data from the template
+        const processMarshalling = JSON.parse('{{ process_marshalling|escapejs }}');
+        
         // Now restore saved values after all elements and data are defined
         if (localStorage.getItem('lastScaleId')) {
             $('#scale-select').val(localStorage.getItem('lastScaleId'));
@@ -778,6 +781,9 @@
                     }
                 }
             });
+            
+            // Update marshalling field states after populating data
+            updateMarshallingFields();
         }
         
         // Function to update save button text for second weighing in weighbridge
@@ -958,6 +964,36 @@
             updateProcessInfo(processId);
         }
         
+        // Function to update marshalling field states based on current process
+        function updateMarshallingFields() {
+            const currentProcessId = $('#process-select').val() || document.getElementById('process-id-input')?.value;
+            const isMarshallingAllowed = currentProcessId && processMarshalling[currentProcessId];
+            
+            // Find all custom fields and update their disabled state if they are marshalling fields
+            const customFields = customFieldsContainer.querySelectorAll('input, select, textarea');
+            customFields.forEach(field => {
+                const fieldName = field.getAttribute('data-field-name');
+                if (fieldName && (fieldName.toLowerCase() === 'lot_number' || fieldName.toLowerCase() === 'group_number')) {
+                    field.disabled = !isMarshallingAllowed;
+                    
+                    // Add or remove styling to indicate disabled state
+                    if (!isMarshallingAllowed) {
+                        if (field.tagName === 'INPUT' || field.tagName === 'SELECT' || field.tagName === 'TEXTAREA') {
+                            field.classList.add('bg-gray-100', 'cursor-not-allowed');
+                        } else {
+                            field.classList.add('opacity-50', 'cursor-not-allowed');
+                        }
+                    } else {
+                        if (field.tagName === 'INPUT' || field.tagName === 'SELECT' || field.tagName === 'TEXTAREA') {
+                            field.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                        } else {
+                            field.classList.remove('opacity-50', 'cursor-not-allowed');
+                        }
+                    }
+                }
+            });
+        }
+        
         // Function to render custom fields
         function renderCustomFields(fieldsSchema) {
             // Clear the container first
@@ -967,6 +1003,10 @@
                 customFieldsContainer.innerHTML = '<p class="text-zinc-500">No custom fields defined for this process.</p>';
                 return;
             }
+            
+            // Get the currently selected process ID to check if marshalling is allowed
+            const currentProcessId = $('#process-select').val() || document.getElementById('process-id-input')?.value;
+            const isMarshallingAllowed = currentProcessId && processMarshalling[currentProcessId];
             
             // Create a field for each schema item
             fieldsSchema.forEach(field => {
@@ -995,6 +1035,9 @@
                 // Create the input based on field type
                 let input;
                 
+                // Check if this is a special marshalling field (lot_number or group_number)
+                const isMarshallingField = field.name.toLowerCase() === 'lot_number' || field.name.toLowerCase() === 'group_number';
+                
                 switch (field.type) {
                     case 'text':
                     case 'email':
@@ -1020,6 +1063,15 @@
                         
                         if (required) {
                             input.required = true;
+                        }
+                        
+                        // For marshalling fields, disable the input if marshalling is not enabled
+                        if (isMarshallingField) {
+                            input.disabled = !isMarshallingAllowed;
+                            // Add styling to indicate disabled state
+                            if (!isMarshallingAllowed) {
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            }
                         }
                         break;
                         
@@ -1050,6 +1102,15 @@
                         if (required) {
                             input.required = true;
                         }
+                        
+                        // For marshalling fields, disable the input if marshalling is not enabled
+                        if (isMarshallingField) {
+                            input.disabled = !isMarshallingAllowed;
+                            // Add styling to indicate disabled state
+                            if (!isMarshallingAllowed) {
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            }
+                        }
                         break;
                         
                     case 'textarea':
@@ -1066,6 +1127,15 @@
                         
                         if (required) {
                             input.required = true;
+                        }
+                        
+                        // For marshalling fields, disable the input if marshalling is not enabled
+                        if (isMarshallingField) {
+                            input.disabled = !isMarshallingAllowed;
+                            // Add styling to indicate disabled state
+                            if (!isMarshallingAllowed) {
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            }
                         }
                         break;
                         
@@ -1108,6 +1178,15 @@
                                 input.appendChild(optionElement);
                             });
                         }
+                        
+                        // For marshalling fields, disable the input if marshalling is not enabled
+                        if (isMarshallingField) {
+                            input.disabled = !isMarshallingAllowed;
+                            // Add styling to indicate disabled state
+                            if (!isMarshallingAllowed) {
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            }
+                        }
                         break;
                         
                     case 'checkbox':
@@ -1133,6 +1212,15 @@
                         
                         // Replace input with the wrapper
                         input = checkboxWrapper;
+                        
+                        // For marshalling fields, disable the input if marshalling is not enabled
+                        if (isMarshallingField) {
+                            input.querySelector('input[type="checkbox"]').disabled = !isMarshallingAllowed;
+                            // Add styling to indicate disabled state
+                            if (!isMarshallingAllowed) {
+                                input.classList.add('opacity-50', 'cursor-not-allowed');
+                            }
+                        }
                         break;
                         
                     case 'radio':
@@ -1171,6 +1259,18 @@
                         
                         // Replace input with the wrapper
                         input = radioWrapper;
+                        
+                        // For marshalling fields, disable the input if marshalling is not enabled
+                        if (isMarshallingField) {
+                            const radioInputs = input.querySelectorAll('input[type="radio"]');
+                            radioInputs.forEach(radio => {
+                                radio.disabled = !isMarshallingAllowed;
+                            });
+                            // Add styling to indicate disabled state
+                            if (!isMarshallingAllowed) {
+                                input.classList.add('opacity-50', 'cursor-not-allowed');
+                            }
+                        }
                         break;
                         
                     default:
@@ -1184,6 +1284,15 @@
                         
                         if (required) {
                             input.required = true;
+                        }
+                        
+                        // For marshalling fields, disable the input if marshalling is not enabled
+                        if (isMarshallingField) {
+                            input.disabled = !isMarshallingAllowed;
+                            // Add styling to indicate disabled state
+                            if (!isMarshallingAllowed) {
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            }
                         }
                         break;
                 }
@@ -1598,9 +1707,23 @@
             }
         });
 
-        // Auto-focus the input when page loads
+        // Auto-focus the input when page loads, unless marshalling fields are enabled
         window.addEventListener('load', function() {
-            barcodeInput.focus();
+            // Check if any marshalling fields are present and enabled
+            const marshallingFields = document.querySelectorAll('input[data-field-name="lot_number"], input[data-field-name="group_number"]');
+            let marshallingFieldHasFocus = false;
+            
+            for (const field of marshallingFields) {
+                if (!field.disabled) { // If any marshalling field is enabled
+                    marshallingFieldHasFocus = true;
+                    break;
+                }
+            }
+            
+            // Only focus barcode if no marshalling fields are enabled
+            if (!marshallingFieldHasFocus) {
+                barcodeInput.focus();
+            }
         });
 
         // Keep focus on the input field (helpful for continuous scanning)
@@ -1616,7 +1739,15 @@
                 return;
             }
 
-            if (document.activeElement !== barcodeInput) {
+            // Check if any marshalling fields are currently focused and enabled
+            const activeElement = document.activeElement;
+            const isMarshallingField = activeElement && 
+                                      (activeElement.getAttribute('data-field-name') === 'lot_number' || 
+                                       activeElement.getAttribute('data-field-name') === 'group_number') &&
+                                      !activeElement.disabled;
+            
+            // Only steal focus back to barcode if active element is not an enabled marshalling field
+            if (document.activeElement !== barcodeInput && !isMarshallingField) {
                 barcodeInput.focus();
             }
         });
@@ -1624,7 +1755,15 @@
         // After a selection is made in dropdowns, return focus to barcode
         function refocusBarcodeSoon() {
             setTimeout(() => {
-                if (document.activeElement !== barcodeInput) {
+                // Check if any marshalling fields are currently focused and enabled
+                const activeElement = document.activeElement;
+                const isMarshallingField = activeElement && 
+                                          (activeElement.getAttribute('data-field-name') === 'lot_number' || 
+                                           activeElement.getAttribute('data-field-name') === 'group_number') &&
+                                          !activeElement.disabled;
+                
+                // Only refocus to barcode if active element is not an enabled marshalling field
+                if (document.activeElement !== barcodeInput && !isMarshallingField) {
                     barcodeInput.focus();
                 }
             }, 50);
@@ -1759,11 +1898,30 @@
                     updateDeliveryNoteVisibility();
                     updateBarcodeRequirement();
                 }
+                
+                // Update custom fields based on new process
+                const processId = this.value;
+                customFieldsContainer.classList.toggle('hidden', !processId);
+                
+                if (processId) {
+                    // Get custom fields for the selected process from our pre-loaded data
+                    const customFields = processCustomFields[processId] || [];
+                    renderCustomFields(customFields);
+                } else {
+                    // Clear custom fields
+                    customFieldsContainer.innerHTML = '';
+                }
+                
+                // Update marshalling field states after process change
+                updateMarshallingFields();
             });
         }
 
         // Initialize visibility on page load
         updateDeliveryNoteVisibility();
+        
+        // Update marshalling fields on initial load
+        updateMarshallingFields();
 
         // Enhanced barcode handling for CTL workflow
         //barcodeInput.addEventListener('input', function() {
@@ -2149,6 +2307,9 @@
                     if (productIdInput && productIdInput.value) {
                         updateTareWeightFromProduct(productIdInput.value);
                     }
+                    
+                    // Update marshalling field states after updating the record
+                    updateMarshallingFields();
                 }
             }
         });

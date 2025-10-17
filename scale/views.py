@@ -419,6 +419,12 @@ def weighing_station(request):
                     field_name = key.replace('custom_field_', '')
                     custom_data[field_name] = value
             
+            # If the process allows marshalling, ensure marshalling-specific fields are handled properly
+            if process.allow_marshalling:
+                # For marshalling, we might want to enhance the custom_data with
+                # additional validation or processing for lot_number and group_number
+                pass
+            
             # Handle delivery note association
             delivery_note = None
             delivery_note_id = request.POST.get('delivery_note_id')
@@ -571,7 +577,19 @@ def weighing_station(request):
                     existing_record.net_weight = net_weight
                     existing_record.unit_of_measure = unit_of_measure
                     existing_record.notes = notes
-                    existing_record.custom_data = custom_data
+                    
+                    # If marshalling is allowed, preserve existing marshalling fields (lot_number, group_number)
+                    # unless they are being explicitly updated in the current request
+                    preserved_custom_data = existing_record.custom_data.copy()
+                    for field_name, field_value in custom_data.items():
+                        # Only update if not empty, or if it's a marshalling field being explicitly set
+                        if field_value.strip() != '' or field_name.lower() not in ['lot_number', 'group_number']:
+                            preserved_custom_data[field_name] = field_value
+                        # If marshalling is enabled and these fields are being updated, allow the update
+                        elif process.allow_marshalling and field_name.lower() in ['lot_number', 'group_number']:
+                            preserved_custom_data[field_name] = field_value
+                    
+                    existing_record.custom_data = preserved_custom_data
                     existing_record.is_synced = False  # Mark for resync
                     existing_record.save()
                     weighing_record = existing_record
@@ -651,6 +669,11 @@ def weighing_station(request):
     for product in products:
         product_tare_weights[product.id] = float(product.tare_weight or 0)
     
+    # Create a dictionary of marshalling allowance for each process
+    process_marshalling = {}
+    for process in processes:
+        process_marshalling[process.id] = process.allow_marshalling
+    
     context = {
         'scales': scales,
         'products': products,
@@ -660,6 +683,7 @@ def weighing_station(request):
         'trucks': trucks,
         'trailers': trailers,
         'process_custom_fields': json.dumps(process_custom_fields),
+        'process_marshalling': json.dumps(process_marshalling),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
         'active_delivery_note': active_delivery_note,
