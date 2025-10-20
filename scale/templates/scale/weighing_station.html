@@ -263,7 +263,7 @@
                 </div>
             </div>
 
-            <div id="delivery-note-selection-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+            <div id="delivery-note-selection-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 hidden">
                 <div class="px-6 py-5 border-b border-zinc-200">
                     <h2 class="text-lg font-medium text-zinc-900">DELIVERY NOTE {% if processes.0.process_type == 'WeighBridge' %}<span class="text-red-500 text-sm">(Required)</span>{% endif %}</h2>
                 </div>
@@ -519,6 +519,7 @@
     }
     
     document.addEventListener('DOMContentLoaded', function() {
+        let isErrorActive = false; // Global state to track if an error is active
         console.log('DOM loaded - script running');
         console.log('Last scale ID:', localStorage.getItem('lastScaleId'));
         
@@ -840,7 +841,7 @@
                     barcodeLabel.textContent = 'Barcode (Optional)';
                     barcodeLabel.classList.remove('text-blue-600');
                 }
-            } else if (processType === 'ctl_workflow') {
+            } else if (processType === 'ctl_workflow' || processType === 'ctl_commercial_workflow') {
                 // CTL Workflow: barcode is required
                 barcodeInput.setAttribute('required', 'required');
                 if (barcodeLabel) {
@@ -1529,7 +1530,7 @@
             }
             
             // For CTL workflow, ensure we have an active delivery note
-            if (processType === 'ctl_workflow') {
+            if (processType === 'ctl_workflow' || processType === 'ctl_commercial_workflow') {
                 const activeDeliveryNoteId = document.getElementById('active-delivery-note-id').value;
                 if (!activeDeliveryNoteId) {
                     alert('No active delivery note. Please scan a barcode to activate a delivery note first.');
@@ -1678,274 +1679,77 @@
             }
         });
         
-        // Handle barcode scanning button click
-        // Handle USB barcode scanner input
-        const barcodeInput = document.getElementById('barcode-input');
+                const barcodeInput = document.getElementById('barcode-input');
 
         // Ensure the input stays focused for scanning
         barcodeInput.addEventListener('focus', function() {
             console.log('Barcode input focused - ready to scan');
         });
 
-        // Handle barcode scanner input (most scanners send Enter after the barcode)
+        // Main handler for Enter key (most scanners)
         barcodeInput.addEventListener('keypress', function(e) {
-            if (isErrorActive) { // Prevent processing if an error is active
-                e.preventDefault();
-                return;
-            }
             if (e.key === 'Enter') {
                 e.preventDefault(); // Prevent any form submission
-                
-                // Flash the input to provide visual feedback of successful scan
-                this.classList.add('bg-green-50');
-                setTimeout(() => {
-                    this.classList.remove('bg-green-50');
-                }, 500);
-                
-                console.log('Barcode scanned:', this.value);
-                // Do whatever you need with the barcode value here
-            }
-        });
 
-        // Auto-focus the input when page loads, unless marshalling fields are enabled
-        window.addEventListener('load', function() {
-            // Check if any marshalling fields are present and enabled
-            const marshallingFields = document.querySelectorAll('input[data-field-name="lot_number"], input[data-field-name="group_number"]');
-            let marshallingFieldHasFocus = false;
-            
-            for (const field of marshallingFields) {
-                if (!field.disabled) { // If any marshalling field is enabled
-                    marshallingFieldHasFocus = true;
-                    break;
+                const barcodeValue = this.value.trim();
+                
+                if (!barcodeValue) {
+                    console.log('Empty barcode, ignoring');
+                    return;
                 }
-            }
-            
-            // Only focus barcode if no marshalling fields are enabled
-            if (!marshallingFieldHasFocus) {
-                barcodeInput.focus();
-            }
-        });
 
-        // Keep focus on the input field (helpful for continuous scanning)
-        // Do not steal focus when interacting with dropdowns/selects
-        document.addEventListener('click', function(event) {
-            const target = event.target;
-            const isNativeSelect = !!target.closest && target.closest('select');
-            const isCustomDropdown = !!target.closest && (target.closest('[role="listbox"]') || target.closest('.select2-container') || target.closest('.dropdown') || target.closest('[data-dropdown]'));
-            const isDropdownOpen = document.querySelector('.select2-container--open, [role="listbox"][aria-expanded="true"], .dropdown.open');
-            const isNotesOrTextarea = !!target.closest && (target.closest('#notes') || target.closest('textarea'));
-
-            if (isNativeSelect || isCustomDropdown || isDropdownOpen || isNotesOrTextarea) {
-                return;
-            }
-
-            // Check if any marshalling fields are currently focused and enabled
-            const activeElement = document.activeElement;
-            const isMarshallingField = activeElement && 
-                                      (activeElement.getAttribute('data-field-name') === 'lot_number' || 
-                                       activeElement.getAttribute('data-field-name') === 'group_number') &&
-                                      !activeElement.disabled;
-            
-            // Only steal focus back to barcode if active element is not an enabled marshalling field
-            if (document.activeElement !== barcodeInput && !isMarshallingField) {
-                barcodeInput.focus();
-            }
-        });
-
-        // After a selection is made in dropdowns, return focus to barcode
-        function refocusBarcodeSoon() {
-            setTimeout(() => {
-                // Check if any marshalling fields are currently focused and enabled
-                const activeElement = document.activeElement;
-                const isMarshallingField = activeElement && 
-                                          (activeElement.getAttribute('data-field-name') === 'lot_number' || 
-                                           activeElement.getAttribute('data-field-name') === 'group_number') &&
-                                          !activeElement.disabled;
+                console.log('Barcode scanned via Enter:', barcodeValue);
                 
-                // Only refocus to barcode if active element is not an enabled marshalling field
-                if (document.activeElement !== barcodeInput && !isMarshallingField) {
-                    barcodeInput.focus();
-                }
-            }, 50);
-        }
-
-        // Native selects
-        if (typeof unitSelect !== 'undefined' && unitSelect) {
-            unitSelect.addEventListener('change', refocusBarcodeSoon);
-            unitSelect.addEventListener('blur', refocusBarcodeSoon);
-        }
-        if (typeof scaleSelect !== 'undefined' && scaleSelect) {
-            scaleSelect.addEventListener('change', refocusBarcodeSoon);
-            scaleSelect.addEventListener('blur', refocusBarcodeSoon);
-        }
-        if (typeof processSelect !== 'undefined' && processSelect) {
-            processSelect.addEventListener('change', refocusBarcodeSoon);
-            processSelect.addEventListener('blur', refocusBarcodeSoon);
-        }
-        if (typeof deliveryNoteSelect !== 'undefined' && deliveryNoteSelect) {
-            deliveryNoteSelect.addEventListener('change', refocusBarcodeSoon);
-            deliveryNoteSelect.addEventListener('blur', refocusBarcodeSoon);
-        }
-
-        // Dynamically added custom field selects
-        document.addEventListener('change', function(e) {
-            if (e.target && e.target.matches('#custom-fields-container select')) {
-                refocusBarcodeSoon();
+                processBarcodeInput(barcodeValue);
             }
         });
-        document.addEventListener('blur', function(e) {
-            if (e.target && e.target.matches('#custom-fields-container select')) {
-                refocusBarcodeSoon();
-            }
-        }, true);
 
-        // If Select2 or similar is used, refocus after dropdown closes
-        if (window.jQuery) {
-            try {
-                jQuery(function($) {
-                    const dropdownSelectors = '#unit-select, #scale-select, #process-select, #delivery-note-select';
-                    $(dropdownSelectors).on('select2:close', function() {
-                        refocusBarcodeSoon();
-                    });
-                });
-            } catch (e) {
-                // ignore if select2 not present
-            }
-        }
-
-        // Optional: Auto-submit detection for scanners that don't send Enter
+        // Auto-submit detection for scanners that don't send Enter
         let scanTimeout;
         barcodeInput.addEventListener('input', function() {
-            if (isErrorActive) { // Prevent processing if an error is active
-                return;
-            }
             clearTimeout(scanTimeout);
             
-            // If the input reaches a typical barcode length, assume scan is complete
-            if (this.value.length >= 8) { // Adjust this number based on your barcode format
+            const barcodeValue = this.value.trim();
+            
+            if (barcodeValue.length >= 8) { // Adjust this number based on your barcode format
                 scanTimeout = setTimeout(() => {
-                    // Flash visual feedback
-                    this.classList.add('bg-green-50');
-                    setTimeout(() => {
-                        this.classList.remove('bg-green-50');
-                    }, 500);
-                    
-                    console.log('Barcode detected:', this.value);
-                    // Process the barcode here
+                    console.log('Barcode detected via auto-detection:', barcodeValue);
+                    processBarcodeInput(barcodeValue);
                 }, 100); // Small delay to ensure the scan is complete
             }
         });
 
-
-//        const scanItemBarcodeBtn = document.getElementById('scan-item-barcode-btn');
-//        const barcodeInput = document.getElementById('barcode-input');
-//        scanItemBarcodeBtn.addEventListener('click', function() {
-//            const randomBarcode = 'ITEM' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-//            barcodeInput.value = randomBarcode;
-//            barcodeInput.classList.add('bg-green-50');
-//            setTimeout(() => {
-//                barcodeInput.classList.remove('bg-green-50');
-//            }, 500);
-//        });
-
-        // Initialize weight label, live weight display, and barcode requirement on page load
-        updateWeightLabel(false);
-        toggleLiveWeightDisplay();
-        updateBarcodeRequirement();
-        
-        // Set tare weight from the default active product when page loads
-        const productIdInput = document.getElementById('product-id-input');
-        if (productIdInput && productIdInput.value) {
-            updateTareWeightFromProduct(productIdInput.value);
-        }
-
-        // CTL Workflow Functions
-        function updateDeliveryNoteVisibility() {
-            const deliveryNoteCard = document.getElementById('delivery-note-selection-card');
-            const activeDeliveryNoteCard = document.getElementById('active-delivery-note-card');
+        // Centralized barcode processing function
+        function processBarcodeInput(barcodeValue) {
+            if (barcodeInput.dataset.processing === 'true') {
+                console.log('Already processing a barcode, ignoring');
+                return;
+            }
             
-            console.log('updateDeliveryNoteVisibility called with processType:', processType);
-            console.log('deliveryNoteCard element:', deliveryNoteCard);
-            console.log('activeDeliveryNoteCard element:', activeDeliveryNoteCard);
+            barcodeInput.dataset.processing = 'true';
             
-            if (processType === 'ctl_workflow') {
-                console.log('CTL workflow detected - hiding delivery note selection');
-                // Hide delivery note selection for CTL workflow
-                if (deliveryNoteCard) {
-                    deliveryNoteCard.style.display = 'none';
-                }
-                // Active delivery note card visibility is controlled by backend
+            barcodeInput.classList.add('bg-green-50');
+            setTimeout(() => {
+                barcodeInput.classList.remove('bg-green-50');
+            }, 500);
+            
+            if (processType === 'ctl_workflow' || processType === 'ctl_commercial_workflow') {
+                handleCtlWorkflowBarcode(barcodeValue);
             } else {
-                console.log('Other process type - showing delivery note selection');
-                // Show delivery note selection for other process types
-                if (deliveryNoteCard) {
-                    deliveryNoteCard.style.display = 'block';
-                }
-                if (activeDeliveryNoteCard) {
-                    activeDeliveryNoteCard.style.display = 'none';
-                }
+                console.log('Barcode ready for use:', barcodeValue);
+                setTimeout(() => {
+                    barcodeInput.dataset.processing = 'false';
+                }, 500);
             }
         }
 
-
-        // Handle process type changes
-        if (processSelect) {
-            processSelect.addEventListener('change', function() {
-                // Update global processType variable
-                const selectedOption = this.options[this.selectedIndex];
-                if (selectedOption && selectedOption.dataset.processType) {
-                    processType = selectedOption.dataset.processType;
-                    updateDeliveryNoteVisibility();
-                    updateBarcodeRequirement();
-                }
-                
-                // Update custom fields based on new process
-                const processId = this.value;
-                customFieldsContainer.classList.toggle('hidden', !processId);
-                
-                if (processId) {
-                    // Get custom fields for the selected process from our pre-loaded data
-                    const customFields = processCustomFields[processId] || [];
-                    renderCustomFields(customFields);
-                } else {
-                    // Clear custom fields
-                    customFieldsContainer.innerHTML = '';
-                }
-                
-                // Update marshalling field states after process change
-                updateMarshallingFields();
-            });
-        }
-
-        // Initialize visibility on page load
-        updateDeliveryNoteVisibility();
-        
-        // Update marshalling fields on initial load
-        updateMarshallingFields();
-
-        // Enhanced barcode handling for CTL workflow
-        //barcodeInput.addEventListener('input', function() {
-         //   if (processType === 'ctl_workflow' && this.value.length >=8) {
-                // Auto-detect delivery note for CTL workflow
-         //       handleCtlWorkflowBarcode(this.value);
-         //   }
-        //});
-       
-        let ctlScanTimeout;
-        barcodeInput.addEventListener('input', function() {
-            clearTimeout(ctlScanTimeout);
-            
-            if (processType === 'ctl_workflow' && this.value.length >= 8) {
-                ctlScanTimeout = setTimeout(() => {
-                    handleCtlWorkflowBarcode(this.value);
-                }, 2000); 
-            }
-        });
-
+        // CTL Workflow specific handler
         function handleCtlWorkflowBarcode(barcode) {
-            if (!barcode.trim()) return;
+            if (!barcode.trim()) {
+                barcodeInput.dataset.processing = 'false';
+                return;
+            }
 
-            // Make AJAX call to find delivery note by barcode
             fetch('{% url "scale:find_delivery_note_by_barcode" %}', {
                 method: 'POST',
                 headers: {
@@ -1957,17 +1761,18 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // If the bale has already been scanned, show the recall modal
-                    if (data.delivery_note.scanned_records_data.some(record => record.barcode === barcode)) {
+                    const alreadyScanned = data.delivery_note.scanned_records_data.some(
+                        record => record.barcode === barcode
+                    );
+                    
+                    if (alreadyScanned) {
                         showRecallModal(barcode, data.delivery_note);
                     } else {
-                        // Update active delivery note display
                         updateActiveDeliveryNoteDisplay(data.delivery_note);
                         showNotification(data.message, 'success');
                     }
                 } else {
                     showNotification(data.message, 'error');
-                    // Clear barcode input if not found
                     barcodeInput.value = '';
                     barcodeInput.focus();
                 }
@@ -1975,156 +1780,257 @@
             .catch(error => {
                 console.error('Error:', error);
                 showNotification('Error checking barcode', 'error');
+            })
+            .finally(() => {
+                barcodeInput.dataset.processing = 'false';
             });
         }
 
-        function updateActiveDeliveryNoteDisplay(deliveryNote) {
-            const activeCard = document.getElementById('active-delivery-note-card');
-            const activeDeliveryNoteId = document.getElementById('active-delivery-note-id');
-            
-            console.log('updateActiveDeliveryNoteDisplay called with:', deliveryNote);
-            console.log('activeCard element:', activeCard);
-            console.log('activeDeliveryNoteId element:', activeDeliveryNoteId);
-            
-            // Show the active delivery note card
-            if (activeCard) {
-                activeCard.classList.remove('hidden');
-            }
-            
-            // Update delivery note ID in hidden input
-            if (activeDeliveryNoteId) {
-                activeDeliveryNoteId.value = deliveryNote.id;
-            }
-            
-            // Update display fields with null checks
-            const dnoteNumberEl = document.getElementById('active-dnote-number');
-            const growerNameEl = document.getElementById('active-grower-name');
-            const growerNumberEl = document.getElementById('active-grower-number');
-            const locationEl = document.getElementById('active-location');
-            const sellingPointEl = document.getElementById('active-selling-point');
-            const saleDateEl = document.getElementById('active-sale-date');
-            
-            if (dnoteNumberEl) dnoteNumberEl.textContent = deliveryNote.delivery_note_number;
-            if (growerNameEl) growerNameEl.textContent = deliveryNote.grower_name;
-            if (growerNumberEl) growerNumberEl.textContent = deliveryNote.grower_number;
-            if (locationEl) locationEl.textContent = deliveryNote.location_name;
-            if (sellingPointEl) sellingPointEl.textContent = deliveryNote.selling_point_name;
-            if (saleDateEl) saleDateEl.textContent = deliveryNote.preferred_sale_date;
-            
-            // Update progress
-            const progressText = document.getElementById('progress-text');
-            const progressBar = document.getElementById('progress-bar');
-            
-            if (progressText) {
-                progressText.textContent = `${deliveryNote.scanned_bales} of ${deliveryNote.total_bales} bales scanned`;
-            }
-            
-            if (progressBar) {
-                const percentage = deliveryNote.total_bales > 0 ? (deliveryNote.scanned_bales / deliveryNote.total_bales) * 100 : 0;
-                progressBar.style.width = percentage + '%';
-            }
-            
-            // Update scanned barcodes list
-            updateScannedBarcodesList(deliveryNote.scanned_records_data || []);
-            
-            // Check for completion and show confirmation button
-            const confirmationDiv = document.getElementById('dnote-closure-confirmation');
-            if (deliveryNote.scanned_bales >= deliveryNote.total_bales) {
-                if (confirmationDiv) confirmationDiv.classList.remove('hidden');
-            } else {
-                if (confirmationDiv) confirmationDiv.classList.add('hidden');
-            }
-        }
+        // Auto-focus the input when page loads
+        window.addEventListener('load', function() {
+            barcodeInput.focus();
+        });
 
-        function updateScannedBarcodesList(scannedRecordsData) {
-            const listContainer = document.getElementById('scanned-barcodes-list');
-            if (!listContainer) return;
-            
-            // Clear existing content
-            listContainer.innerHTML = '';
-            
-            // Add each barcode as a badge
-            scannedRecordsData.forEach(record => {
-                const badge = document.createElement('span');
-                badge.className = 'inline-block bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded mr-1 mb-1';
-                badge.textContent = `${record.barcode}-${record.weight_display}`;
-                listContainer.appendChild(badge);
-            });
-            
-            // Show/hide the parent container based on whether there are barcodes
-            const parentContainer = listContainer.closest('.mt-4');
-            if (parentContainer) {
-                if (scannedRecordsData.length > 0) {
-                    parentContainer.style.display = 'block';
-                    // Update the count in the header
-                    const header = parentContainer.querySelector('h4');
-                    if (header) {
-                        header.textContent = `Scanned Barcodes (${scannedRecordsData.length})`;
+        // Keep focus on the input field (helpful for continuous scanning)
+        document.addEventListener('click', function(event) {
+            if (event.target.tagName !== 'BUTTON' && 
+                event.target.tagName !== 'INPUT' && 
+                event.target.tagName !== 'SELECT' &&
+                event.target.tagName !== 'TEXTAREA') {
+                if (document.activeElement !== barcodeInput) {
+                    barcodeInput.focus();
+                }
+            }
+        });
+                // Initialize weight label, live weight display, and barcode requirement on page load
+                updateWeightLabel(false);
+                toggleLiveWeightDisplay();
+                updateBarcodeRequirement();
+                // Set tare weight from the default active product when page loads
+                const productIdInput = document.getElementById('product-id-input');
+                if (productIdInput && productIdInput.value) {
+                    updateTareWeightFromProduct(productIdInput.value);
+                }
+                // CTL Workflow Functions
+                function updateDeliveryNoteVisibility() {
+                    const deliveryNoteCard = document.getElementById('delivery-note-selection-card');
+                    const activeDeliveryNoteCard = document.getElementById('active-delivery-note-card');
+                    console.log('updateDeliveryNoteVisibility called with processType:', processType);
+                    console.log('deliveryNoteCard element:', deliveryNoteCard);
+                    console.log('activeDeliveryNoteCard element:', activeDeliveryNoteCard);
+                    if (processType === 'ctl_workflow' || processType === 'ctl_commercial_workflow') {
+                        console.log('CTL workflow detected - hiding delivery note selection');
+                        // Hide delivery note selection for CTL workflow
+                        if (deliveryNoteCard) {
+                            deliveryNoteCard.style.display = 'none';
+                        }
+                        // Active delivery note card visibility is controlled by backend
+                    } else {
+                        console.log('Other process type - showing delivery note selection');
+                        // Show delivery note selection for other process types
+                        if (deliveryNoteCard) {
+                            deliveryNoteCard.style.display = 'block';
+                        }
+                        if (activeDeliveryNoteCard) {
+                            activeDeliveryNoteCard.style.display = 'none';
+                        }
                     }
-                } else {
-                    parentContainer.style.display = 'none';
                 }
-            }
-        }
-
-        let isErrorActive = false; // Global state to track if an error is active
-
-        function showNotification(message, type = 'info') {
-            // Remove any existing notifications first to prevent stacking
-            const existingNotifications = document.querySelectorAll('.app-notification');
-            existingNotifications.forEach(n => n.remove());
-
-            const notification = document.createElement('div');
-            const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-            
-            // Add a common class for easy selection and removal
-            notification.className = `app-notification fixed top-4 right-4 ${bgColor} text-white px-6 py-4 rounded-lg shadow-xl z-50 flex items-center justify-between min-w-96`;
-            
-            // Create message text
-            const messageSpan = document.createElement('span');
-            messageSpan.textContent = message;
-            messageSpan.className = 'flex-1 mr-4 text-lg font-semibold';
-            
-            // Create close button for error messages and a general close for others
-            const closeButton = document.createElement('button');
-            closeButton.innerHTML = '×';
-            closeButton.className = 'text-white hover:text-gray-200 font-bold text-2xl leading-none p-2 ml-4'; // Increased font size and added padding
-            closeButton.onclick = () => {
-                notification.remove();
-                if (type === 'error') {
-                    isErrorActive = false; // Reset error state when dismissed
-                    toggleFormInteractions(true); // Re-enable form elements
+                // Handle process type changes
+                if (processSelect) {
+                    processSelect.addEventListener('change', function() {
+                        // Update global processType variable
+                        const selectedOption = this.options[this.selectedIndex];
+                        if (selectedOption && selectedOption.dataset.processType) {
+                            processType = selectedOption.dataset.processType;
+                            updateDeliveryNoteVisibility();
+                            updateBarcodeRequirement();
+                        }
+                        // Update custom fields based on new process
+                        const processId = this.value;
+                        customFieldsContainer.classList.toggle('hidden', !processId);
+                        if (processId) {
+                            // Get custom fields for the selected process from our pre-loaded data
+                            const customFields = processCustomFields[processId] || [];
+                            renderCustomFields(customFields);
+                        } else {
+                            // Clear custom fields
+                            customFieldsContainer.innerHTML = '';
+                        }
+                        // Update marshalling field states after process change
+                        updateMarshallingFields();
+                    });
                 }
-            };
-            
-            notification.appendChild(messageSpan);
-            notification.appendChild(closeButton); // Always add a close button
+                // Initialize visibility on page load
+                updateDeliveryNoteVisibility();
+                // Update marshalling fields on initial load
+                updateMarshallingFields();
+                function updateActiveDeliveryNoteDisplay(deliveryNote) {
+                    const activeCard = document.getElementById('active-delivery-note-card');
+                    const activeDeliveryNoteId = document.getElementById('active-delivery-note-id');
+                    console.log('updateActiveDeliveryNoteDisplay called with:', deliveryNote);
+                    console.log('activeCard element:', activeCard);
+                    console.log('activeDeliveryNoteId element:', activeDeliveryNoteId);
+                    // Show the active delivery note card
+                    if (activeCard) {
+                        activeCard.classList.remove('hidden');
+                    }
+                    // Update delivery note ID in hidden input
+                    if (activeDeliveryNoteId) {
+                        activeDeliveryNoteId.value = deliveryNote.id;
+                    }
+                    // Update display fields with null checks
+                    const dnoteNumberEl = document.getElementById('active-dnote-number');
+                    const growerNameEl = document.getElementById('active-grower-name');
+                    const growerNumberEl = document.getElementById('active-grower-number');
+                    const locationEl = document.getElementById('active-location');
+                    const sellingPointEl = document.getElementById('active-selling-point');
+                    const saleDateEl = document.getElementById('active-sale-date');
+                    if (dnoteNumberEl) dnoteNumberEl.textContent = deliveryNote.delivery_note_number;
+                    if (growerNameEl) growerNameEl.textContent = deliveryNote.grower_name;
+                    if (growerNumberEl) growerNumberEl.textContent = deliveryNote.grower_number;
+                    if (locationEl) locationEl.textContent = deliveryNote.location_name;
+                    if (sellingPointEl) sellingPointEl.textContent = deliveryNote.selling_point_name;
+                    if (saleDateEl) saleDateEl.textContent = deliveryNote.preferred_sale_date;
+                    // Update progress
+                    const progressText = document.getElementById('progress-text');
+                    const progressBar = document.getElementById('progress-bar');
+                    if (progressText) {
+                        progressText.textContent = `${deliveryNote.scanned_bales} of ${deliveryNote.total_bales} bales scanned`;
+                    }
+                    if (progressBar) {
+                        const percentage = deliveryNote.total_bales > 0 ? (deliveryNote.scanned_bales / deliveryNote.total_bales) * 100 : 0;
+                        progressBar.style.width = percentage + '%';
+                    }
+                    // Update scanned barcodes list
+                    updateScannedBarcodesList(deliveryNote.scanned_records_data || []);
+                    // Check for completion and show confirmation button
+                    const confirmationDiv = document.getElementById('dnote-closure-confirmation');
+                    if (deliveryNote.scanned_bales >= deliveryNote.total_bales) {
+                        if (confirmationDiv) confirmationDiv.classList.remove('hidden');
+                    } else {
+                        if (confirmationDiv) confirmationDiv.classList.add('hidden');
+                    }
+                }
+                function updateScannedBarcodesList(scannedRecordsData) {
+                    const listContainer = document.getElementById('scanned-barcodes-list');
+                    if (!listContainer) return;
+                    // Clear existing content
+                    listContainer.innerHTML = '';
+                    // Add each barcode as a badge
+                    scannedRecordsData.forEach(record => {
+                        const badge = document.createElement('span');
+                        badge.className = 'inline-block bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded mr-1 mb-1';
+                        badge.textContent = `${record.barcode}-${record.weight_display}`;
+                        listContainer.appendChild(badge);
+                    });
+                    // Show/hide the parent container based on whether there are barcodes
+                    const parentContainer = listContainer.closest('.mt-4');
+                    if (parentContainer) {
+                        if (scannedRecordsData.length > 0) {
+                            parentContainer.style.display = 'block';
+                            // Update the count in the header
+                            const header = parentContainer.querySelector('h4');
+                            if (header) {
+                                header.textContent = `Scanned Barcodes (${scannedRecordsData.length})`;
+                            }
+                        } else {
+                            parentContainer.style.display = 'none';
+                        }
+                    }
+                }
+                function showNotification(message, type = 'info') {
+                    // Remove any existing notifications first to prevent stacking
+                    const existingNotifications = document.querySelectorAll('.app-notification');
+                    existingNotifications.forEach(n => n.remove());
+                    const notification = document.createElement('div');
+                    const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+                    // Add a common class for easy selection and removal
+                    notification.className = `app-notification fixed top-4 right-4 ${bgColor} text-white px-6 py-4 rounded-lg shadow-xl z-50 flex items-center justify-between min-w-96`;
+                    // Create message text
+                    const messageSpan = document.createElement('span');
+                    messageSpan.textContent = message;
+                    messageSpan.className = 'flex-1 mr-4 text-lg font-semibold';
 
-            document.body.appendChild(notification);
-            
-            if (type === 'error') {
-                isErrorActive = true; // Set error state
-                toggleFormInteractions(false); // Disable form elements
-            } else {
-                // Auto-remove only for non-error messages (user can still manually close errors)
-                setTimeout(() => {
-                    notification.remove();
-                }, 4000);
-            }
-        }
-
-        function toggleFormInteractions(enable) {
-            const barcodeInput = document.getElementById('barcode-input');
-            const saveBtn = document.getElementById('save-btn');
-            const savePrintBtn = document.getElementById('save-print-btn');
-            const clearBtn = document.getElementById('clear-btn');
-            const getWeightBtn = document.getElementById('get-weight-btn');
-
-            if (barcodeInput) barcodeInput.disabled = !enable;
-            if (saveBtn) saveBtn.disabled = !enable;
-            if (savePrintBtn) savePrintBtn.disabled = !enable;
-            if (clearBtn) clearBtn.disabled = !enable;
-            if (getWeightBtn) getWeightBtn.disabled = !enable;
+                    // Create close button for error messages and a general close for others
+        
+                    const closeButton = document.createElement('button');
+        
+                    closeButton.innerHTML = '×';
+        
+                    closeButton.className = 'text-white hover:text-gray-200 font-bold text-2xl leading-none p-2 ml-4'; // Increased font size and added padding
+        
+                    closeButton.onclick = () => {
+        
+                        notification.remove();
+        
+                        if (type === 'error') {
+        
+                            isErrorActive = false; // Reset error state when dismissed
+        
+                            toggleFormInteractions(true); // Re-enable form elements
+        
+                        }
+        
+                    };
+        
+                    
+        
+                    notification.appendChild(messageSpan);
+        
+                    notification.appendChild(closeButton); // Always add a close button
+        
+        
+        
+                    document.body.appendChild(notification);
+        
+                    
+        
+                    if (type === 'error') {
+        
+                        isErrorActive = true; // Set error state
+        
+                        toggleFormInteractions(false); // Disable form elements
+        
+                    } else {
+        
+                        // Auto-remove only for non-error messages (user can still manually close errors)
+        
+                        setTimeout(() => {
+        
+                            notification.remove();
+        
+                        }, 4000);
+        
+                    }
+        
+                }
+        
+        
+        
+                function toggleFormInteractions(enable) {
+        
+                    const barcodeInput = document.getElementById('barcode-input');
+        
+                    const saveBtn = document.getElementById('save-btn');
+        
+                    const savePrintBtn = document.getElementById('save-print-btn');
+        
+                    const clearBtn = document.getElementById('clear-btn');
+        
+                    const getWeightBtn = document.getElementById('get-weight-btn');
+        
+        
+        
+                    if (barcodeInput) barcodeInput.disabled = !enable;
+        
+                    if (saveBtn) saveBtn.disabled = !enable;
+        
+                    if (savePrintBtn) savePrintBtn.disabled = !enable;
+        
+                    if (clearBtn) clearBtn.disabled = !enable;
+        
+                    if (getWeightBtn) getWeightBtn.disabled = !enable;
 
             // Visually indicate disabled state
             if (barcodeInput) {

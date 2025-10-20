@@ -431,7 +431,7 @@ def weighing_station(request):
             process = WeighingProcess.objects.get(pk=process_id)
             
             # Handle CTL Workflow logic
-            if process.process_type == 'ctl_workflow':
+            if process.process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
                 with transaction.atomic():
                     # Check if we have an active delivery note from the form
                     if delivery_note_id:
@@ -562,7 +562,7 @@ def weighing_station(request):
             else:
                 # For CTL workflow, check for existing record to update. Otherwise, create new.
                 existing_record = None
-                if process.process_type == 'ctl_workflow' and delivery_note and barcode:
+                if process.process_type in ['ctl_workflow', 'ctl_commercial_workflow'] and delivery_note and barcode:
                     existing_record = WeighingRecord.objects.filter(barcode=barcode, delivery_note=delivery_note).first()
                 
                 if existing_record:
@@ -614,7 +614,7 @@ def weighing_station(request):
                     )
             
             # Handle CTL Workflow completion logic
-            if process.process_type == 'ctl_workflow' and weighing_record and delivery_note:
+            if process.process_type in ['ctl_workflow', 'ctl_commercial_workflow'] and weighing_record and delivery_note:
                 # Add barcode to scanned list (this handles increment automatically)
                 if delivery_note.add_scanned_barcode(barcode):
                     delivery_note.save()
@@ -806,7 +806,7 @@ def send_to_erp(barcode, net_weight, weighing_scale_id, weighing_record_id, requ
             try:
 
                 # Use different URL based on process type
-                if process_type == 'ctl_workflow':
+                if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
                     url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight))}"
                     print(f"CTL Workflow URL: {url}")
                 else:
