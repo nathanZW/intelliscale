@@ -580,16 +580,7 @@ def weighing_station(request):
                     
                     # If marshalling is allowed, preserve existing marshalling fields (lot_number, group_number)
                     # unless they are being explicitly updated in the current request
-                    preserved_custom_data = existing_record.custom_data.copy()
-                    for field_name, field_value in custom_data.items():
-                        # Only update if not empty, or if it's a marshalling field being explicitly set
-                        if field_value.strip() != '' or field_name.lower() not in ['lot_number', 'group_number']:
-                            preserved_custom_data[field_name] = field_value
-                        # If marshalling is enabled and these fields are being updated, allow the update
-                        elif process.allow_marshalling and field_name.lower() in ['lot_number', 'group_number']:
-                            preserved_custom_data[field_name] = field_value
-                    
-                    existing_record.custom_data = preserved_custom_data
+                    existing_record.custom_data = custom_data
                     existing_record.is_synced = False  # Mark for resync
                     existing_record.save()
                     weighing_record = existing_record
@@ -634,7 +625,7 @@ def weighing_station(request):
             
             # Send barcode, mass and scale id to erp system (if record created successfully)
             if weighing_record:
-                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, process.process_type)
+                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, custom_data, process.process_type)
             
             print_after_save = request.POST.get('print_after_save') == 'true'
             
@@ -693,7 +684,7 @@ def weighing_station(request):
     return render(request, 'scale/weighing_station.html', context)
 
 
-def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, process_type=None):
+def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type=None):
     # Trim whitespace from barcode
     barcode = str(barcode).strip() if barcode else ''
 
@@ -807,7 +798,10 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, proc
 
                 # Use different URL based on process type
                 if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
-                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight))}&scale_id={scale_id}"
+                    hessian_id = custom_data.get('hessian_id', '')
+                    lot_number = custom_data.get('lot_number', '')
+                    group_number = custom_data.get('group_number', '')
+                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight))}&scale_id={scale_id}&hessian_id={hessian_id}&lot_number={lot_number}&group_number={group_number}"
                     print(f"CTL Workflow URL: {url}")
                 else:
                     url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + str(round(float(net_weight))) + "/" + barcode
@@ -867,7 +861,7 @@ def sync_all_unsynced(request):
     weighing_records = WeighingRecord.objects.filter(is_synced=False)
     for weighing_record in weighing_records:
         print('Syncing weighing record: ', weighing_record.id)
-        send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.process.process_type)
+        send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, weighing_record.process.process_type)
     return redirect('scale:weighing_record_list')
 
 
