@@ -693,7 +693,7 @@ def weighing_station(request):
     return render(request, 'scale/weighing_station.html', context)
 
 
-def send_to_erp(barcode, net_weight, weighing_scale_id, weighing_record_id, request, process_type=None):
+def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, process_type=None):
     # Trim whitespace from barcode
     barcode = str(barcode).strip() if barcode else ''
 
@@ -798,7 +798,7 @@ def send_to_erp(barcode, net_weight, weighing_scale_id, weighing_record_id, requ
         pass
     
         # print("Sending to erp system")
-        print(f"Sending barcode {barcode}, net weight {net_weight}, and scale id {weighing_scale_id} to erp system")
+        print(f"Sending barcode {barcode}, net weight {net_weight}, and scale id {scale_id} to erp system")
         # print('Session ID: ', session_id)
         # session_id = request.COOKIES.get('erp_session_id')
         # print('Session ID: ', session_id)
@@ -807,10 +807,10 @@ def send_to_erp(barcode, net_weight, weighing_scale_id, weighing_record_id, requ
 
                 # Use different URL based on process type
                 if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
-                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight))}"
+                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight))}&scale_id={scale_id}"
                     print(f"CTL Workflow URL: {url}")
                 else:
-                    url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + str(round(float(net_weight))) + "/" + barcode
+                    url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + str(round(float(net_weight))) + "/" + barcode + "/" + str(scale_id)
                     print(f"Standard URL: {url}")
                 
                 # print(f"Process type: {process_type}, Using URL: {url}")
@@ -1944,15 +1944,17 @@ def find_delivery_note_by_barcode(request):
     """Find delivery note by searching for barcode in odoo_data.bales"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Only POST requests allowed'})
+
     
+
     try:
         barcode = request.POST.get('barcode', '').strip()
         if not barcode:
             return JsonResponse({'success': False, 'message': 'Barcode is required'})
-        
+
         # Search for delivery note with this barcode in odoo_data
         delivery_notes = DeliveryNote.objects.all()
-        
+
         for dnote in delivery_notes:
             if dnote.find_bale_by_barcode(barcode):
                 # Check if this delivery note is already being scanned by someone else
@@ -1964,7 +1966,7 @@ def find_delivery_note_by_barcode(request):
                         'success': False, 
                         'message': f'Another delivery note ({currently_scanned.delivery_note_number}) is currently being scanned'
                     })
-                
+
                 # Check if this specific delivery note can accept this barcode
                 if not dnote.can_accept_barcode(barcode):
                     # Check if this is just a rescan of an already-scanned barcode from the same delivery note
@@ -1984,16 +1986,14 @@ def find_delivery_note_by_barcode(request):
                             'success': False, 
                             'message': f'Barcode {barcode} not found in delivery note {dnote.delivery_note_number}'
                         })
-                
                 # Activate this delivery note for scanning if not already active
                 if not dnote.is_being_scanned:
                     # Deactivate any other delivery notes
                     DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
                     dnote.is_being_scanned = True
                     dnote.save()
-                
+
                 bale_info = dnote.find_bale_by_barcode(barcode)
-                
                 return JsonResponse({
                     'success': True,
                     'delivery_note': {
@@ -2013,13 +2013,11 @@ def find_delivery_note_by_barcode(request):
                     'bale': bale_info,
                     'message': f'Found in delivery note {dnote.delivery_note_number}'
                 })
-        
         # Barcode not found in any delivery note
         return JsonResponse({
             'success': False, 
             'message': 'Barcode not found. Please scan the correct bale.'
         })
-        
     except Exception as e:
         return JsonResponse({
             'success': False,
@@ -2027,11 +2025,58 @@ def find_delivery_note_by_barcode(request):
         })
 
 @login_required
+def search_delivery_notes(request):
+    """Search for open delivery notes to populate the combobox."""
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'message': 'Only GET requests allowed'})
+    delivery_notes = DeliveryNote.objects.filter(status='Open').order_by('-created_at')
+    data = [{'id': note.id, 'text': note.delivery_note_number} for note in delivery_notes]
+    return JsonResponse(data, safe=False)
+
+@login_required
+def activate_delivery_note(request, pk):
+    """Activate a delivery note for scanning."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Only POST requests allowed'})
+
+    try:
+        with transaction.atomic():
+            # Deactivate any other delivery notes
+            DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
+            
+            # Activate the selected delivery note
+            dnote = get_object_or_404(DeliveryNote, pk=pk)
+            dnote.is_being_scanned = True
+            dnote.save()
+
+            return JsonResponse({
+                'success': True,
+                'delivery_note': {
+                    'id': dnote.id,
+                    'delivery_note_number': dnote.delivery_note_number,
+                    'grower_name': dnote.get_grower_name(),
+                    'grower_number': dnote.get_grower_number(),
+                    'total_bales': dnote.get_bale_count(),
+                    'scanned_bales': dnote.scanned_bales_count,
+                    'scanned_records_data': dnote.get_scanned_records_data(),
+                    'remaining_bales': dnote.get_remaining_bales_count(),
+                    'location_name': dnote.get_location_name(),
+                    'selling_point_name': dnote.get_selling_point_name(),
+                    'preferred_sale_date': dnote.get_preferred_sale_date(),
+                    'is_being_scanned': dnote.is_being_scanned
+                },
+                'message': f'Delivery note {dnote.delivery_note_number} activated for scanning.'
+            })
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)})
+
+@login_required
 def driver_create_ajax(request):
     """Create a new driver via AJAX request"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Only POST requests allowed'})
-    
+
     try:
         form = DriverForm(request.POST)
         if form.is_valid():
@@ -2060,7 +2105,7 @@ def driver_create_ajax(request):
             'success': False,
             'message': f'Error creating driver: {str(e)}'
         })  
-        
+
 @login_required
 def recall_bale_weighing_station(request):
     """
@@ -2115,7 +2160,6 @@ def recall_bale_weighing_station(request):
                 }
                 if dnote_closed:
                     response_data['message'] = 'All bales recalled. Delivery note is no longer active.'
-                
                 return JsonResponse(response_data)
             else:
                 # This case might occur if there's a race condition
@@ -2130,14 +2174,15 @@ def recall_bale_weighing_station(request):
         return JsonResponse({'success': False, 'message': f'Error communicating with ERP: {str(e)}'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'An unexpected error occurred: {str(e)}'})
-        
 
 @login_required
 def truck_create_ajax(request):
     """Create a new truck via AJAX request"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Only POST requests allowed'})
+
     
+
     try:
         form = TruckForm(request.POST)
         if form.is_valid():
@@ -2167,8 +2212,6 @@ def truck_create_ajax(request):
             'success': False,
             'message': f'Error creating truck: {str(e)}'
         })
-        
-        
 
 @login_required
 def trailer_create_ajax(request):
@@ -2217,9 +2260,11 @@ def delivery_note_create_ajax(request):
         if form.is_valid():
             delivery_note = form.save(commit=False)
             delivery_note.created_by = request.user
+
             # Generate automatic delivery note number
             delivery_note.delivery_note_number = generate_delivery_note_number()
             delivery_note.save()
+
             return JsonResponse({
                 'success': True,
                 'delivery_note': {

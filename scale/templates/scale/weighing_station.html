@@ -114,7 +114,7 @@
                     
                     <!-- Net Weight as headline text -->
                     <div class="mt-8 mb-8 text-center">
-                        <h3 id="main-weight-title" class="text-sm font-medium text-zinc-500 uppercase">Current Weight</h3>
+                        <h3 id="main-weight-title" class="text-sm font-medium text-zinc-500 uppercase">Net Weight</h3>
                         <div class="flex items-center justify-center mt-2">
                             <span id="net-weight-display" class="text-9xl font-bold text-zinc-900">0.00</span>
                             <span id="unit-display-net" class="ml-2 text-xl text-zinc-500">kg</span>
@@ -282,6 +282,25 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                                 </svg>
                                 New
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Delivery Note Card (for ctl_commercial_workflow) -->
+            <div id="search-delivery-note-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 hidden">
+                <div class="px-6 py-5 border-b border-zinc-200">
+                    <h2 class="text-lg font-medium text-zinc-900">Search Delivery Note</h2>
+                </div>
+                <div class="p-6">
+                    <div>
+                        <label for="delivery-note-search" class="block text-sm font-medium text-zinc-700 mb-1">Search and Select Delivery Note</label>
+                        <div class="flex gap-2">
+                            <input list="delivery-note-list" id="delivery-note-search" class="flex-1 rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                            <datalist id="delivery-note-list"></datalist>
+                            <button type="button" id="activate-delivery-note-btn" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700 px-3 py-2">
+                                Activate
                             </button>
                         </div>
                     </div>
@@ -813,7 +832,7 @@
             } else {
                 // First weighing or non-weighbridge - show gross weight
                 if (weightLabel) weightLabel.textContent = 'Gross Weight';
-                if (mainWeightTitle) mainWeightTitle.textContent = 'Current Weight';
+                if (mainWeightTitle) mainWeightTitle.textContent = 'Net Weight';
             }
         }
         
@@ -1815,27 +1834,72 @@
                 function updateDeliveryNoteVisibility() {
                     const deliveryNoteCard = document.getElementById('delivery-note-selection-card');
                     const activeDeliveryNoteCard = document.getElementById('active-delivery-note-card');
-                    console.log('updateDeliveryNoteVisibility called with processType:', processType);
-                    console.log('deliveryNoteCard element:', deliveryNoteCard);
-                    console.log('activeDeliveryNoteCard element:', activeDeliveryNoteCard);
-                    if (processType === 'ctl_workflow' || processType === 'ctl_commercial_workflow') {
-                        console.log('CTL workflow detected - hiding delivery note selection');
-                        // Hide delivery note selection for CTL workflow
-                        if (deliveryNoteCard) {
-                            deliveryNoteCard.style.display = 'none';
+                    const searchDeliveryNoteCard = document.getElementById('search-delivery-note-card');
+
+                    if (processType === 'ctl_commercial_workflow') {
+                        if (document.getElementById('active-delivery-note-id').value) {
+                            searchDeliveryNoteCard.style.display = 'none';
+                        } else {
+                            searchDeliveryNoteCard.style.display = 'block';
                         }
-                        // Active delivery note card visibility is controlled by backend
+                        deliveryNoteCard.style.display = 'none';
+                    } else if (processType === 'ctl_workflow') {
+                        deliveryNoteCard.style.display = 'none';
+                        searchDeliveryNoteCard.style.display = 'none';
                     } else {
-                        console.log('Other process type - showing delivery note selection');
-                        // Show delivery note selection for other process types
-                        if (deliveryNoteCard) {
-                            deliveryNoteCard.style.display = 'block';
-                        }
+                        deliveryNoteCard.style.display = 'block';
+                        searchDeliveryNoteCard.style.display = 'none';
                         if (activeDeliveryNoteCard) {
                             activeDeliveryNoteCard.style.display = 'none';
                         }
                     }
                 }
+
+                function fetchDeliveryNotes() {
+                    fetch('{% url "scale:search_delivery_notes" %}')
+                        .then(response => response.json())
+                        .then(data => {
+                            const datalist = document.getElementById('delivery-note-list');
+                            datalist.innerHTML = '';
+                            data.forEach(note => {
+                                const option = document.createElement('option');
+                                option.value = note.text;
+                                option.dataset.id = note.id;
+                                datalist.appendChild(option);
+                            });
+                        });
+                }
+
+                document.getElementById('activate-delivery-note-btn').addEventListener('click', function() {
+                    const input = document.getElementById('delivery-note-search');
+                    const selectedOption = Array.from(document.getElementById('delivery-note-list').options).find(o => o.value === input.value);
+
+                    if (selectedOption) {
+                        const deliveryNoteId = selectedOption.dataset.id;
+                        const url = `{% url 'scale:activate_delivery_note' 0 %}`.replace('0', deliveryNoteId);
+
+                        fetch(url, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token }}'
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                updateActiveDeliveryNoteDisplay(data.delivery_note);
+                                document.getElementById('search-delivery-note-card').style.display = 'none';
+                                showNotification(data.message, 'success');
+                            } else {
+                                showNotification(data.message, 'error');
+                            }
+                        });
+                    } else {
+                        showNotification('Please select a valid delivery note from the list.', 'error');
+                    }
+                });
+
                 // Handle process type changes
                 if (processSelect) {
                     processSelect.addEventListener('change', function() {
@@ -1863,14 +1927,12 @@
                 }
                 // Initialize visibility on page load
                 updateDeliveryNoteVisibility();
+                fetchDeliveryNotes();
                 // Update marshalling fields on initial load
                 updateMarshallingFields();
                 function updateActiveDeliveryNoteDisplay(deliveryNote) {
                     const activeCard = document.getElementById('active-delivery-note-card');
                     const activeDeliveryNoteId = document.getElementById('active-delivery-note-id');
-                    console.log('updateActiveDeliveryNoteDisplay called with:', deliveryNote);
-                    console.log('activeCard element:', activeCard);
-                    console.log('activeDeliveryNoteId element:', activeDeliveryNoteId);
                     // Show the active delivery note card
                     if (activeCard) {
                         activeCard.classList.remove('hidden');
@@ -2075,6 +2137,7 @@
                             document.getElementById('dnote-closure-confirmation').classList.add('hidden');
                             document.getElementById('barcode-input').value = '';
                             document.getElementById('barcode-input').focus();
+                            updateDeliveryNoteVisibility();
                             
                         } else {
                             showNotification(data.message, 'error');
@@ -2132,6 +2195,7 @@
                             document.getElementById('dnote-closure-confirmation').classList.add('hidden');
                             document.getElementById('barcode-input').value = '';
                             document.getElementById('barcode-input').focus();
+                            updateDeliveryNoteVisibility();
                             
                         } else {
                             showNotification(data.message, 'error');

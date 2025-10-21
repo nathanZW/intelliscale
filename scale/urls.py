@@ -55,6 +55,8 @@ urlpatterns = [
     path('delivery-notes/<int:pk>/print/', views.print_delivery_note, name='print_delivery_note'),
     path('delivery-notes/<int:delivery_note_id>/record/', views.get_delivery_note_record, name='get_delivery_note_record'),
     path('delivery-notes/find-by-barcode/', views.find_delivery_note_by_barcode, name='find_delivery_note_by_barcode'),
+    path('delivery-notes/search/', views.search_delivery_notes, name='search_delivery_notes'),
+    path('delivery-notes/<int:pk>/activate/', views.activate_delivery_note, name='activate_delivery_note'),
     
     # Weighing Station URLs
     path('weighing-station/', views.weighing_station, name='weighing_station'),
