@@ -807,10 +807,10 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, proc
 
                 # Use different URL based on process type
                 if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
-                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight))}&scale_id={scale_id}"
+                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight), 2)}&scale_id={scale_id}"
                     print(f"CTL Workflow URL: {url}")
                 else:
-                    url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + str(round(float(net_weight))) + "/" + barcode + "/" + str(scale_id)
+                    url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + s tr(round(float(net_weight), 2)) + "/" + barcode + "/" + str(scale_id)
                     print(f"Standard URL: {url}")
                 
                 # print(f"Process type: {process_type}, Using URL: {url}")

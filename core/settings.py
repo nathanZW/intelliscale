@@ -138,7 +138,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CELERY_BEAT_SCHEDULE = {
     'sync-odoo-delivery-notes': {
         'task': 'scale.tasks.sync_odoo_delivery_notes',
-        'schedule': 60.0#crontab(minute='*/2'),  # Every 2 minutes
+        'schedule': 30.0#crontab(minute='*/2'),  # Every 2 minutes
         # Or use: 'schedule': 60.0,  # Every 60 seconds
     },
     'check-completed-delivery-notes': {

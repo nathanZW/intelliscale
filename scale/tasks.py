@@ -21,7 +21,7 @@ def sync_odoo_delivery_notes():
         response = requests.get(
             f'{company_settings.api_url}/api/grower-delivery-notes',
             params={'include_bales': 'true',
-                    'state': 'checked,laid'},
+                    'state': 'open,checked,laid'},
             headers={
                 'User-Agent': 'insomnia/11.5.0',
                 # Add cookie authentication if needed
@@ -92,7 +92,7 @@ def sync_single_delivery_note(odoo_record):
         delivery_note.sync_error_message = ''
         
         # Map Odoo state to your status
-        if odoo_record['state'] in ['checked', 'laid']:
+        if odoo_record['state'] in ['open', 'checked', 'laid']:
             delivery_note.status = 'Open'
         else:  # 'closed'
             delivery_note.status = 'Closed'
