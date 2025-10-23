@@ -2168,7 +2168,7 @@ def recall_and_update_bale(request):
         
         # Build the API URL with required parameters like in send_to_erp (only scale_id and hessian_id)
         # Use 2 decimal places format like the weighing records (instead of rounding to whole number)
-        base_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0.10&scale_id={scale_id}"
+        base_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0.01&scale_id={scale_id}"
         if hessian_id:
             api_url = f"{base_url}&hessian_id={hessian_id}"
             print(f"Recall and Update: Using hessian in API URL: {api_url}")

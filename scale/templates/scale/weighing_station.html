@@ -29,9 +29,9 @@
 <form id="weighing-form" method="post" action="{% url 'scale:weighing_station' %}">
     {% csrf_token %}
     <input type="hidden" id="weighing-record-id" name="weighing_record_id" value="">
-    <div class="grid grid-cols-5 gap-6">
-        <!-- Left column - Machine/Weighing Data (60%) -->
-        <div class="col-span-3 space-y-6">
+    <div class="grid grid-cols-2 gap-6">
+        <!-- Left column - Machine/Weighing Data (50%) -->
+        <div class="col-span-1 space-y-6">
             <!-- MACHINE Section -->
             <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200" style="height: 80vh; display: flex; flex-direction: column;">
                 <div class="px-2 py-2 border-b border-zinc-200 flex justify-between">
@@ -233,8 +233,8 @@
             </div> 
         </div>
 
-        <!-- Right column - Scale Connection (40%) -->
-        <div class="col-span-2 space-y-6">
+        <!-- Right column - Scale Connection (50%) -->
+        <div class="col-span-1 space-y-6">
             <!-- Scale Connection Card -->
             <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
                 <div class="px-3 py-2 border-b border-zinc-200">
@@ -372,8 +372,8 @@
                         <div class="max-h-32 overflow-y-auto bg-zinc-50 rounded-md p-2" id="scanned-barcodes-list">
                             {% if active_delivery_note %}
                                 {% for record in active_delivery_note.scanned_records_data %}
-                                <span class="inline-block bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded mr-1 mb-1">
-                                    {{ record.barcode }}-{{ record.weight_display }}
+                                <span class="inline-block bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded mr-1 mb-1">
+                                    {{ record.barcode }}-{{ record.weight_display }}{% if record.group_number or record.lot_number %}-{{ record.group_number|default:"" }}-{{ record.lot_number|default:"" }}{% endif %}
                                 </span>
                                 {% endfor %}
                             {% endif %}
@@ -1786,6 +1786,12 @@
                         showRecallModal(barcode, data.delivery_note);
                     } else {
                         updateActiveDeliveryNoteDisplay(data.delivery_note);
+                        
+                        // If bale information is available, populate custom fields and make them readonly
+                        if (data.bale) {
+                            populateBaleCustomFields(data.bale);
+                        }
+                        
                         showNotification(data.message, 'success');
                     }
                 } else {
@@ -1980,8 +1986,12 @@
                     // Add each barcode as a badge
                     scannedRecordsData.forEach(record => {
                         const badge = document.createElement('span');
-                        badge.className = 'inline-block bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded mr-1 mb-1';
-                        badge.textContent = `${record.barcode}-${record.weight_display}`;
+                        badge.className = 'inline-block bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded mr-1 mb-1';
+                        let displayText = `${record.barcode}-${record.weight_display}`;
+                        if (record.group_number || record.lot_number) {
+                            displayText += `-${record.group_number || ''}-${record.lot_number || ''}`;
+                        }
+                        badge.textContent = displayText;
                         listContainer.appendChild(badge);
                     });
                     // Show/hide the parent container based on whether there are barcodes
@@ -1999,6 +2009,31 @@
                         }
                     }
                 }
+
+                function populateBaleCustomFields(baleInfo) {
+                    // Populate lot_number field if it exists in baleInfo and the field exists in the form
+                    if (baleInfo.lot_number) {
+                        const lotNumberField = document.querySelector('[name="custom_field_lot_number"]');
+                        if (lotNumberField) {
+                            lotNumberField.value = baleInfo.lot_number;
+                            lotNumberField.readOnly = true;
+                            lotNumberField.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            lotNumberField.title = 'This field is populated from the scanned barcode and cannot be edited';
+                        }
+                    }
+                    
+                    // Populate group_number field if it exists in baleInfo and the field exists in the form
+                    if (baleInfo.group_number) {
+                        const groupNumberField = document.querySelector('[name="custom_field_group_number"]');
+                        if (groupNumberField) {
+                            groupNumberField.value = baleInfo.group_number;
+                            groupNumberField.readOnly = true;
+                            groupNumberField.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            groupNumberField.title = 'This field is populated from the scanned barcode and cannot be edited';
+                        }
+                    }
+                }
+
                 function showNotification(message, type = 'info') {
                     // Remove any existing notifications first to prevent stacking
                     const existingNotifications = document.querySelectorAll('.app-notification');

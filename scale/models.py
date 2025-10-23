@@ -170,7 +170,7 @@ class DeliveryNote(models.Model):
     
     def get_scanned_records_data(self):
         """
-        Returns a list of dictionaries: [{'barcode': '...', 'weight_display': '...kg'}]
+        Returns a list of dictionaries: [{'barcode': '...', 'weight_display': '...kg', 'group_number': '...', 'lot_number': '...'}]
         for all scanned barcodes associated with this delivery note, ordered by scan time.
         """
         # Get all WeighingRecords for this delivery note that have a barcode
@@ -191,28 +191,39 @@ class DeliveryNote(models.Model):
         # Re-order the results based on the original scanned_barcodes list order
         result = []
         for barcode in self.scanned_barcodes:
+            # Get bale information for additional data like group_number and lot_number
+            bale_info = self.find_bale_by_barcode(barcode)
+            
             if barcode in barcode_map:
-                result.append({
+                record_data = {
                     'barcode': barcode,
                     'weight_display': barcode_map[barcode]
-                })
+                }
             else:
                 # If no weighing record exists, check if we can get weight data from odoo_data
-                bale_info = self.find_bale_by_barcode(barcode)
                 if bale_info and 'weight' in bale_info:
                     weight = bale_info['weight']
                     unit = bale_info.get('unit_of_measure', 'kg')  # Default to kg if not specified
-                    result.append({
+                    record_data = {
                         'barcode': barcode,
                         'weight_display': f"{weight}{unit}"
-                    })
+                    }
                 else:
                     # This might happen if there was an error creating the weighing record
                     # Default to 0.0kg, though ideally all scanned barcodes should have weighing records
-                    result.append({
+                    record_data = {
                         'barcode': barcode,
                         'weight_display': 'Pending'
-                    })
+                    }
+            
+            # Add group_number and lot_number if available in bale_info
+            if bale_info:
+                if 'group_number' in bale_info:
+                    record_data['group_number'] = bale_info.get('group_number', '')
+                if 'lot_number' in bale_info:
+                    record_data['lot_number'] = bale_info.get('lot_number', '')
+            
+            result.append(record_data)
         
         return result
 
