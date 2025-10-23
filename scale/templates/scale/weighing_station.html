@@ -484,7 +484,7 @@
     </form>
 </div>
 
-<!-- Recall Confirmation Modal -->
+<!-- Recall and Update Confirmation Modal -->
 <div id="recall-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
     <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="mt-3 text-center">
@@ -496,15 +496,12 @@
             <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4" id="recall-modal-title">Bale Already Weighed</h3>
             <div class="mt-2 px-7 py-3">
                 <p class="text-sm text-gray-500" id="recall-modal-text">
-                    This bale has already been weighed. You can either update its weight with a new measurement or recall it entirely, which will remove the previous record.
+                    This bale has already been weighed. You can recall it (set to 0) and perform a new weighing.
                 </p>
             </div>
             <div class="items-center px-4 py-3">
-                <button id="update-weight-btn" class="mb-2 px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300">
-                    Update Weight
-                </button>
-                <button id="confirm-recall-btn" class="px-4 py-2 bg-yellow-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-300">
-                    Recall Bale
+                <button id="recall-update-btn" class="mb-2 px-4 py-2 bg-yellow-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                    Recall and Update
                 </button>
                 <button id="cancel-recall-btn" class="mt-3 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
                     Cancel
@@ -2215,11 +2212,10 @@
             });
         }
 
-        // Bale Recall Functionality
+        // Bale Recall and Update Functionality
         const recallModal = document.getElementById('recall-modal');
-        const confirmRecallBtn = document.getElementById('confirm-recall-btn');
+        const recallUpdateBtn = document.getElementById('recall-update-btn');
         const cancelRecallBtn = document.getElementById('cancel-recall-btn');
-        const updateWeightBtn = document.getElementById('update-weight-btn');
         let barcodeToRecall = '';
         let deliveryNoteForUpdate = null;
 
@@ -2237,64 +2233,16 @@
 
         cancelRecallBtn.addEventListener('click', hideRecallModal);
 
-        updateWeightBtn.addEventListener('click', function() {
-            hideRecallModal(); // Close the modal immediately
-
-            if (deliveryNoteForUpdate) {
-                updateActiveDeliveryNoteDisplay(deliveryNoteForUpdate);
-                showNotification('Please proceed with the new weight measurement.', 'info');
-
-                // Find the specific record to update
-                const recordToUpdate = deliveryNoteForUpdate.scanned_records_data.find(record => record.barcode === barcodeToRecall);
-
-                if (recordToUpdate) {
-                    // Populate gross weight with the existing weight of the bale
-                    document.getElementById('gross-weight').value = recordToUpdate.weight;
-                    document.getElementById('net-weight-display').textContent = recordToUpdate.weight.toFixed(WEIGHT_ROUNDING);
-                    document.getElementById('net-weight').value = recordToUpdate.weight.toFixed(WEIGHT_ROUNDING);
-                    document.getElementById('header-net-value').textContent = recordToUpdate.weight.toFixed(WEIGHT_ROUNDING);
-
-                    // Store the ID of the record being updated
-                    document.getElementById('weighing-record-id').value = recordToUpdate.id;
-
-                    // Set the barcode input to the recalled barcode and make it read-only
-                    document.getElementById('barcode-input').value = barcodeToRecall;
-                    document.getElementById('barcode-input').readOnly = true;
-                    document.getElementById('barcode-input').classList.add('bg-gray-100');
-
-                    // Update the save button to indicate an update operation
-                    const saveBtn = document.getElementById('save-btn');
-                    if (saveBtn) { // Added null check
-                        saveBtn.textContent = 'Update Weight';
-                        saveBtn.classList.remove('bg-zinc-900', 'hover:bg-zinc-900/90');
-                        saveBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-                    }
-
-                    // Calculate net weight based on the pre-filled gross weight
-                    calculateNetWeight();
-                    
-                    // Update tare weight from the active product if applicable
-                    const productIdInput = document.getElementById('product-id-input');
-                    if (productIdInput && productIdInput.value) {
-                        updateTareWeightFromProduct(productIdInput.value);
-                    }
-                    
-                    // Update marshalling field states after updating the record
-                    updateMarshallingFields();
-                }
-            }
-        });
-
-        confirmRecallBtn.addEventListener('click', function() {
+        recallUpdateBtn.addEventListener('click', function() {
             const deliveryNoteId = document.getElementById('active-delivery-note-id').value;
             if (!barcodeToRecall || !deliveryNoteId) {
                 showNotification('Cannot recall bale without barcode and active delivery note.', 'error');
                 return;
             }
 
-            // AJAX call to recall the bale
+            // AJAX call to recall the bale (set to 0 in ERP) and then prepare for new weighing
             $.ajax({
-                url: "{% url 'scale:recall_bale_weighing_station' %}",
+                url: "{% url 'scale:recall_and_update_bale' %}",
                 type: 'POST',
                 headers: { 'X-CSRFToken': '{{ csrf_token }}' },
                 data: {
@@ -2305,15 +2253,35 @@
                     if (data.success) {
                         showNotification(data.message, 'success');
                         if (data.dnote_closed) {
-                            // Hide the active dnote card and clear related fields
+                            // Hide the active dnote card and clear related fields if delivery note is closed
                             document.getElementById('active-delivery-note-card').classList.add('hidden');
                             document.getElementById('active-delivery-note-id').value = '';
                         } else {
-                            // Update the UI with the new data
+                            // Update the UI with the new data if delivery note stays active
                             updateActiveDeliveryNoteDisplay(data.delivery_note);
                         }
-                        // Clear the barcode input to allow for a fresh scan
-                        document.getElementById('barcode-input').value = '';
+                        
+                        // Clear the form to allow for a new weighing operation
+                        document.getElementById('weighing-record-id').value = ''; // Clear record ID to create new record
+                        document.getElementById('barcode-input').value = ''; // Clear barcode since user needs to scan again
+                        document.getElementById('barcode-input').readOnly = false; // Make it editable so user can scan again
+                        document.getElementById('barcode-input').classList.remove('bg-gray-100'); // Remove styling
+                        
+                        // Reset weights to 0 to prepare for new weighing
+                        document.getElementById('gross-weight').value = '0';
+                        document.getElementById('net-weight').value = '0';
+                        document.getElementById('net-weight-display').textContent = '0.00';
+                        document.getElementById('header-net-value').textContent = '0.00';
+                        
+                        // Update the save button to indicate a new weighing operation
+                        const saveBtn = document.getElementById('save-btn');
+                        if (saveBtn) { // Added null check
+                            saveBtn.textContent = 'Save New Weight';
+                            saveBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                            saveBtn.classList.add('bg-zinc-900', 'hover:bg-zinc-900/90');
+                        }
+                        
+                        // Clear any error messages and re-enable fields as needed
                         document.getElementById('barcode-input').focus();
                     } else {
                         showNotification(data.message, 'error');

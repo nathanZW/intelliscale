@@ -580,7 +580,10 @@ def weighing_station(request):
                     
                     # If marshalling is allowed, preserve existing marshalling fields (lot_number, group_number)
                     # unless they are being explicitly updated in the current request
-                    existing_record.custom_data = custom_data
+                    if existing_record.custom_data and isinstance(existing_record.custom_data, dict):
+                        existing_record.custom_data.update(custom_data)
+                    else:
+                        existing_record.custom_data = custom_data
                     existing_record.is_synced = False  # Mark for resync
                     existing_record.save()
                     weighing_record = existing_record
@@ -625,7 +628,7 @@ def weighing_station(request):
             
             # Send barcode, mass and scale id to erp system (if record created successfully)
             if weighing_record:
-                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, custom_data, process.process_type)
+                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, process.process_type)
             
             print_after_save = request.POST.get('print_after_save') == 'true'
             
@@ -801,10 +804,10 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     hessian_id = custom_data.get('hessian_id', '')
                     lot_number = custom_data.get('lot_number', '')
                     group_number = custom_data.get('group_number', '')
-                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={round(float(net_weight))}&scale_id={scale_id}&hessian_id={hessian_id}&lot_number={lot_number}&group_number={group_number}"
+                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={float(net_weight):.2f}&scale_id={scale_id}&hessian_id={hessian_id}&lot_number={lot_number}&group_number={group_number}"
                     print(f"CTL Workflow URL: {url}")
                 else:
-                    url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + str(round(float(net_weight))) + "/" + barcode
+                    url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + f"{float(net_weight):.2f}" + "/" + barcode
                     print(f"Standard URL: {url}")
                 
                 # print(f"Process type: {process_type}, Using URL: {url}")
@@ -1158,7 +1161,23 @@ def recall_bale(request, pk):
                     'message': 'Company API settings not configured.'
                 })
             
-            api_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0"
+            # Get the existing weighing record to retrieve hessian value
+            weighing_record = WeighingRecord.objects.filter(
+                delivery_note=delivery_note,
+                barcode=barcode
+            ).first()
+            
+            # Build the API URL with hessian if available
+            base_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0"
+            if weighing_record and weighing_record.custom_data:
+                hessian_id = weighing_record.custom_data.get('hessian_id', '')
+                if hessian_id:
+                    api_url = f"{base_url}&hessian_id={hessian_id}"
+                else:
+                    api_url = base_url
+            else:
+                api_url = base_url
+            
             response = requests.post(api_url, timeout=10)
             
             if response.status_code == 200:
@@ -2101,10 +2120,10 @@ def driver_create_ajax(request):
         })  
 
 @login_required
-def recall_bale_weighing_station(request):
+def recall_and_update_bale(request):
     """
-    Handle bale recall from the weighing station.
-    This will set the bale's mass to 0 in Odoo and remove it from local records.
+    Handle bale recall and update from the weighing station.
+    This will set the bale's mass to 0 in Odoo and then allow for a new weighing.
     """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Invalid request method'})
@@ -2122,42 +2141,99 @@ def recall_bale_weighing_station(request):
         if not delivery_note.has_barcode_been_scanned(barcode):
             return JsonResponse({'success': False, 'message': 'This bale has not been scanned yet.'})
 
-        # Communicate with ERP to set mass to 0
+        # Communicate with ERP to set mass to 0 (recall step)
         company_settings = CompanySettings.objects.first()
         if not company_settings or not company_settings.api_url:
             return JsonResponse({'success': False, 'message': 'ERP settings not configured.'})
 
-        # Assuming a similar API endpoint as the other recall function
-        api_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0"
+        # Get the existing weighing record to retrieve hessian value
+        weighing_record = WeighingRecord.objects.filter(
+            delivery_note=delivery_note,
+            barcode=barcode
+        ).first()
         
-        # Using requests to communicate with the ERP
-        response = requests.post(api_url, timeout=10) # Consider adding auth if needed
+        print(f"Recall and Update: Found weighing record: {weighing_record is not None}")
+        scale_id = ''
+        hessian_id = ''
+        
+        if weighing_record:
+            # Get scale ID from the existing weighing record
+            scale_id = weighing_record.weighing_scale_id or ''
+            print(f"Recall and Update: Scale ID: '{scale_id}'")
+            
+            if weighing_record.custom_data:
+                print(f"Recall and Update: Custom data: {weighing_record.custom_data}")
+                hessian_id = weighing_record.custom_data.get('hessian_id', '')
+                print(f"Recall and Update: Hessian ID: '{hessian_id}'")
+        
+        # Build the API URL with required parameters like in send_to_erp (only scale_id and hessian_id)
+        # Use 2 decimal places format like the weighing records (instead of rounding to whole number)
+        base_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0.10&scale_id={scale_id}"
+        if hessian_id:
+            api_url = f"{base_url}&hessian_id={hessian_id}"
+            print(f"Recall and Update: Using hessian in API URL: {api_url}")
+        else:
+            api_url = base_url
+            print(f"Recall and Update: Using base API URL (no hessian): {api_url}")
+        
+        # Using requests to communicate with the ERP to set mass to 0
+        print(f"Recall and Update: Making API request to: {api_url}")
+        response = requests.post(api_url, timeout=10)
+        print(f"Recall and Update: ERP response status: {response.status_code}")
+        print(f"Recall and Update: ERP response text: {response.text}")
 
         if response.status_code == 200:
-            # If ERP update is successful, recall the bale locally
-            if delivery_note.recall_bale(barcode):
-                dnote_closed = False
-                if delivery_note.scanned_bales_count == 0:
-                    delivery_note.is_being_scanned = False
+            # If ERP update is successful, delete the local record so the barcode can be scanned again
+            weighing_record = WeighingRecord.objects.filter(
+                delivery_note=delivery_note,
+                barcode=barcode
+            ).first()
+            
+            if weighing_record:
+                # Delete the original weighing record so the barcode becomes available for re-scanning
+                weighing_record.delete()
+                
+                # Since we removed a record, we need to adjust the delivery note's scanned count
+                # We need to manually update the scanned_barcodes list to remove this barcode
+                if delivery_note.scanned_barcodes and barcode in delivery_note.scanned_barcodes:
+                    delivery_note.scanned_barcodes = [b for b in delivery_note.scanned_barcodes if b.strip() != barcode.strip()]
+                    # Decrement the scanned count to reflect the removal
+                    if delivery_note.scanned_bales_count > 0:
+                        delivery_note.scanned_bales_count -= 1
                     delivery_note.save()
-                    dnote_closed = True
-
+                
+                # Update the delivery note's scanned records data to reflect the change
                 response_data = {
                     'success': True,
-                    'message': f'Bale {barcode} has been successfully recalled.',
+                    'message': f'Bale {barcode} recalled (set to minimal weight) and removed from records. You can now scan it again for a new weighing.',
                     'delivery_note': {
                         'scanned_bales': delivery_note.scanned_bales_count,
                         'total_bales': delivery_note.get_bale_count(),
                         'scanned_records_data': delivery_note.get_scanned_records_data(),
                     },
-                    'dnote_closed': dnote_closed
+                    'dnote_closed': delivery_note.scanned_bales_count == 0,  # Delivery note closed if all bales done
+                    'barcode': barcode  # Include barcode to allow for new weighing
                 }
-                if dnote_closed:
+                if response_data['dnote_closed']:
                     response_data['message'] = 'All bales recalled. Delivery note is no longer active.'
                 return JsonResponse(response_data)
             else:
-                # This case might occur if there's a race condition
-                return JsonResponse({'success': False, 'message': 'Failed to recall bale locally.'})
+                # If no record was found to delete, at least the ERP was updated
+                # We just return success but don't modify delivery note counts
+                response_data = {
+                    'success': True,
+                    'message': f'Bale {barcode} weight set to 0 in ERP. You can now scan it again for a new weighing.',
+                    'delivery_note': {
+                        'scanned_bales': delivery_note.scanned_bales_count,
+                        'total_bales': delivery_note.get_bale_count(),
+                        'scanned_records_data': delivery_note.get_scanned_records_data(),
+                    },
+                    'dnote_closed': delivery_note.scanned_bales_count == 0,
+                    'barcode': barcode  # Include barcode to allow for new weighing
+                }
+                if response_data['dnote_closed']:
+                    response_data['message'] = 'All bales recalled. Delivery note is no longer active.'
+                return JsonResponse(response_data)
         else:
             return JsonResponse({
                 'success': False,

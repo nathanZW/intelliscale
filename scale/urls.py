@@ -60,7 +60,7 @@ urlpatterns = [
     
     # Weighing Station URLs
     path('weighing-station/', views.weighing_station, name='weighing_station'),
-    path('weighing-station/recall-bale/', views.recall_bale_weighing_station, name='recall_bale_weighing_station'),
+    path('weighing-station/recall-update-bale/', views.recall_and_update_bale, name='recall_and_update_bale'),
     path('scales/<int:scale_id>/get-weight/', views.get_weight, name='get_weight'),
     path('weighing-records/sync-all-unsynced/', views.sync_all_unsynced, name='sync_all_unsynced'),
     
