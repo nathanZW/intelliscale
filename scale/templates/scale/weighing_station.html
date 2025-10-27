@@ -354,7 +354,7 @@
                     </div>
                     
                     <!-- Progress Bar -->
-                    <div class="mt-4">
+                    <div class="mt-4" id="progress-section">
                         <div class="flex justify-between text-sm text-zinc-700 mb-1">
                             <span>Progress</span>
                             <span id="progress-text">{% if active_delivery_note %}{{ active_delivery_note.scanned_bales_count }} of {{ active_delivery_note.get_bale_count }} bales scanned{% else %}0 of 0 bales scanned{% endif %}</span>
@@ -363,6 +363,17 @@
                             <div class="bg-green-600 h-2 rounded-full transition-all duration-300" 
                                  id="progress-bar" 
                                  style="width: {% if active_delivery_note and active_delivery_note.get_bale_count > 0 %}{% widthratio active_delivery_note.scanned_bales_count active_delivery_note.get_bale_count 100 %}{% else %}0{% endif %}%"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bale Count Section (Hidden by default, shown when allow_bale_insert is enabled) -->
+                    <div class="mt-4 hidden" id="bale-count-section">
+                        <div class="flex justify-between text-sm text-zinc-700 mb-1">
+                            <span>Bales Created</span>
+                            <span id="bale-count">0 bales created</span>
+                        </div>
+                        <div class="text-xs text-zinc-500 mt-1">
+                            Creating bales for new delivery note (unknown total count)
                         </div>
                     </div>
                     
@@ -1009,6 +1020,56 @@
                     }
                 }
             });
+        }
+        
+        // Check if allow_bale_insert is enabled for a process
+        function checkAllowBaleInsert(processId) {
+            const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
+            const allowBaleInsert = processId && processAllowBaleInsert[processId] ? processAllowBaleInsert[processId] : false;
+            updateBaleInsertUI(allowBaleInsert);
+        }
+        
+        // Update UI based on allow_bale_insert setting
+        function updateBaleInsertUI(allowBaleInsert) {
+            // Get elements
+            const progressBarSection = document.getElementById('progress-section');
+            const baleCountSection = document.getElementById('bale-count-section');
+            
+            if (allowBaleInsert) {
+                // Hide progress bar and show bale count
+                if (progressBarSection) {
+                    progressBarSection.classList.add('hidden');
+                }
+                if (baleCountSection) {
+                    baleCountSection.classList.remove('hidden');
+                }
+                
+                // Update barcode validation to allow unfamiliar barcodes
+                updateBarcodeValidationForBaleInsert(true);
+            } else {
+                // Show progress bar and hide bale count
+                if (progressBarSection) {
+                    progressBarSection.classList.remove('hidden');
+                }
+                if (baleCountSection) {
+                    baleCountSection.classList.add('hidden');
+                }
+                
+                // Restore normal barcode validation
+                updateBarcodeValidationForBaleInsert(false);
+            }
+        }
+        
+        // Update barcode validation based on bale insert mode
+        function updateBarcodeValidationForBaleInsert(allowUnfamiliar) {
+            const barcodeInput = document.getElementById('barcode-input');
+            if (barcodeInput && allowUnfamiliar) {
+                // Remove validation that requires barcode to be in delivery note
+                barcodeInput.removeAttribute('data-validate-exists');
+            } else if (barcodeInput) {
+                // Restore normal validation
+                barcodeInput.setAttribute('data-validate-exists', 'true');
+            }
         }
         
         // Function to render custom fields
@@ -1766,7 +1827,100 @@
                 barcodeInput.dataset.processing = 'false';
                 return;
             }
+            
+            // Check if allow_bale_insert is enabled for the current process
+            const processId = processSelect ? processSelect.value : null;
+            if (processId) {
+                const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
+                const allowBaleInsert = processAllowBaleInsert[processId] || false;
+                
+                // If allow_bale_insert is enabled, we still want to validate that the barcode
+                // doesn't already exist in another delivery note, but we allow proceeding
+                // even if it's not found (for new bale creation)
+                if (allowBaleInsert) {
+                    // First check if barcode exists anywhere in the system
+                    fetch('{% url "scale:find_delivery_note_by_barcode" %}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        },
+                        body: 'barcode=' + encodeURIComponent(barcode)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Barcode exists in a delivery note - this is fine, proceed normally
+                            const alreadyScanned = data.delivery_note.scanned_records_data.some(
+                                record => record.barcode === barcode
+                            );
+                            
+                            if (alreadyScanned) {
+                                showRecallModal(barcode, data.delivery_note);
+                            } else {
+                                updateActiveDeliveryNoteDisplay(data.delivery_note);
+                                
+                                // If bale information is available, populate custom fields and make them readonly
+                                if (data.bale) {
+                                    populateBaleCustomFields(data.bale);
+                                }
+                                
+                                showNotification(data.message, 'success');
+                            }
+                        } else {
+                            // Check if this is a "not found" message and allow_bale_insert is enabled
+                            const processId = processSelect ? processSelect.value : null;
+                            if (processId) {
+                                const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
+                                const allowBaleInsert = processAllowBaleInsert[processId] || false;
+                                
+                                if (allowBaleInsert && data.message && data.message.includes('Barcode not found')) {
+                                    // When allow_bale_insert is enabled, treat "not found" as acceptable
+                                    // for creating new bales
+                                    console.log('Allowing new barcode for bale insert:', barcode);
+                                    showNotification('New barcode accepted for bale creation', 'success');
+                                    // Don't clear the barcode input or focus - let the user proceed
+                                } else {
+                                    // Standard behavior - show the error message
+                                    showNotification(data.message, 'error');
+                                    barcodeInput.value = '';
+                                    barcodeInput.focus();
+                                }
+                            } else {
+                                // Standard behavior - show the error message
+                                showNotification(data.message, 'error');
+                                barcodeInput.value = '';
+                                barcodeInput.focus();
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        // Check if allow_bale_insert is enabled
+                        const processId = processSelect ? processSelect.value : null;
+                        if (processId) {
+                            const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
+                            const allowBaleInsert = processAllowBaleInsert[processId] || false;
+                            
+                            if (allowBaleInsert) {
+                                // Even on error, allow the barcode to proceed for allow_bale_insert
+                                showNotification('New barcode accepted for bale creation', 'success');
+                                // Don't clear the barcode input or focus - let the user proceed
+                            } else {
+                                showNotification('Error checking barcode', 'error');
+                            }
+                        } else {
+                            showNotification('Error checking barcode', 'error');
+                        }
+                    })
+                    .finally(() => {
+                        barcodeInput.dataset.processing = 'false';
+                    });
+                    return;
+                }
+            }
 
+            // Original behavior for processes without allow_bale_insert
             fetch('{% url "scale:find_delivery_note_by_barcode" %}', {
                 method: 'POST',
                 headers: {
@@ -1921,9 +2075,14 @@
                             // Get custom fields for the selected process from our pre-loaded data
                             const customFields = processCustomFields[processId] || [];
                             renderCustomFields(customFields);
+                            
+                            // Check if allow_bale_insert is enabled for this process
+                            checkAllowBaleInsert(processId);
                         } else {
                             // Clear custom fields
                             customFieldsContainer.innerHTML = '';
+                            // Hide bale insert UI
+                            updateBaleInsertUI(false);
                         }
                         // Update marshalling field states after process change
                         updateMarshallingFields();
@@ -1934,6 +2093,11 @@
                 fetchDeliveryNotes();
                 // Update marshalling fields on initial load
                 updateMarshallingFields();
+                // Initialize bale insert UI based on current process
+                const initialProcessId = processSelect ? processSelect.value : null;
+                if (initialProcessId) {
+                    checkAllowBaleInsert(initialProcessId);
+                }
                 function updateActiveDeliveryNoteDisplay(deliveryNote) {
                     const activeCard = document.getElementById('active-delivery-note-card');
                     const activeDeliveryNoteId = document.getElementById('active-delivery-note-id');

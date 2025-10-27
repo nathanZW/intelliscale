@@ -444,16 +444,22 @@ def weighing_station(request):
                                 # This is a rescan/update, allow it to proceed
                                 pass
                             elif not delivery_note.can_accept_barcode(barcode):
-                                # This is a new scan, but it's not valid
-                                # Check if this is just a rescan of an already-scanned barcode from the same delivery note
-                                if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
-                                    # This barcode belongs to this delivery note, allow rescan/update
+                                # If allow_bale_insert is enabled, allow unfamiliar barcodes
+                                if process.allow_bale_insert:
+                                    # This is a new barcode for a delivery note with bale insertion enabled
+                                    # Allow it to proceed - it will be created in the ERP system
                                     pass
-                                elif delivery_note.is_scanning_complete():
-                                    messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
                                 else:
-                                    messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
-                                return redirect('scale:weighing_station')
+                                    # This is a new scan, but it's not valid
+                                    # Check if this is just a rescan of an already-scanned barcode from the same delivery note
+                                    if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
+                                        # This barcode belongs to this delivery note, allow rescan/update
+                                        pass
+                                    elif delivery_note.is_scanning_complete():
+                                        messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
+                                    else:
+                                        messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
+                                    return redirect('scale:weighing_station')
                             
                     elif barcode:
                         # No active delivery note, search by barcode
@@ -628,7 +634,7 @@ def weighing_station(request):
             
             # Send barcode, mass and scale id to erp system (if record created successfully)
             if weighing_record:
-                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, process.process_type)
+                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, process.process_type, process.id)
             
             print_after_save = request.POST.get('print_after_save') == 'true'
             
@@ -668,6 +674,11 @@ def weighing_station(request):
     for process in processes:
         process_marshalling[process.id] = process.allow_marshalling
     
+    # Create a dictionary of bale insert allowance for each process
+    process_allow_bale_insert = {}
+    for process in processes:
+        process_allow_bale_insert[process.id] = process.allow_bale_insert
+    
     context = {
         'scales': scales,
         'products': products,
@@ -678,6 +689,7 @@ def weighing_station(request):
         'trailers': trailers,
         'process_custom_fields': json.dumps(process_custom_fields),
         'process_marshalling': json.dumps(process_marshalling),
+        'process_allow_bale_insert': json.dumps(process_allow_bale_insert),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
         'active_delivery_note': active_delivery_note,
@@ -687,7 +699,7 @@ def weighing_station(request):
     return render(request, 'scale/weighing_station.html', context)
 
 
-def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type=None):
+def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type=None, process_id=None):
     # Trim whitespace from barcode
     barcode = str(barcode).strip() if barcode else ''
 
@@ -788,69 +800,144 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
     
     
     if company_settings.erp_system.name == 'Odoo':
-        # Send to odoo
-        pass
-    
-        # print("Sending to erp system")
-        print(f"Sending barcode {barcode}, net weight {net_weight}, and scale id {scale_id} to erp system")
-        # print('Session ID: ', session_id)
-        # session_id = request.COOKIES.get('erp_session_id')
-        # print('Session ID: ', session_id)
-        if session_id:
+        # Check if allow_bale_insert is enabled for this process
+        allow_bale_insert_enabled = False
+        if process_id:
             try:
-
-                # Use different URL based on process type
-                if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
-                    hessian_id = custom_data.get('hessian_id', '')
-                    lot_number = custom_data.get('lot_number', '')
-                    group_number = custom_data.get('group_number', '')
-                    url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={float(net_weight):.2f}&scale_id={scale_id}&hessian_id={hessian_id}&lot_number={lot_number}&group_number={group_number}"
-                    print(f"CTL Workflow URL: {url}")
-                else:
-                    url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + f"{float(net_weight):.2f}" + "/" + barcode
-                    print(f"Standard URL: {url}")
+                process = WeighingProcess.objects.get(id=process_id)
+                allow_bale_insert_enabled = process.allow_bale_insert
+            except WeighingProcess.DoesNotExist:
+                print(f"Process with id {process_id} not found")
+        
+        # If allow_bale_insert is enabled, call create-commercial-bale endpoint
+        if allow_bale_insert_enabled:
+            try:
+                # Get the weighing record
+                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
                 
-                # print(f"Process type: {process_type}, Using URL: {url}")
-
-                payload = {}
-                headers = {
-                    # TODO: Add session id FROM COOKIE
-                    "cookie": f"session_id={session_id}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "insomnia/11.1.0",
+                # Get delivery note number if available
+                delivery_note_number = ''
+                if weighing_record.delivery_note:
+                    delivery_note_number = weighing_record.delivery_note.delivery_note_number
+                
+                # Get group, lot, and hessian numbers from custom data if they exist
+                group_number = custom_data.get('group_number', '') if custom_data else ''
+                lot_number = custom_data.get('lot_number', '') if custom_data else ''
+                hessian_id = custom_data.get('hessian_id', '') if custom_data else ''
+                
+                # Prepare parameters for the API call
+                params = {
+                    'barcode': barcode,
+                    'mass': f"{float(net_weight):.2f}",
+                    'dnote_number': delivery_note_number,
+                    'scale_id': scale_id,
+                    'group_number': group_number or '0',
+                    'lot_number': lot_number or '0',
+                    'hessian_id': hessian_id or '0',
+                    'location': 'A'  # Static location as requested
                 }
-
-                response = requests.request("POST", url, json=payload, headers=headers)
                 
-                print(response.status_code)
-
-                print(response.text)
+                # Construct URL for create-commercial-bale endpoint
+                url = f"{company_settings.api_url}/api/bales/create-commercial-bale"
+                
+                print(f"Calling create-commercial-bale with params: {params}")
+                
+                payload = ""
+                headers = {
+                    "cookie": f"session_id={session_id}",
+                    "User-Agent": "insomnia/11.1.0"
+                }
+                
+                # Make the API call
+                response = requests.request("POST", url, data=payload, headers=headers, params=params)
+                
+                print(f"create-commercial-bale response status: {response.status_code}")
+                print(f"create-commercial-bale response text: {response.text}")
                 
                 if response.status_code == 200:
                     # Update weighing record with erp response
-                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
                     weighing_record.is_synced = True
                     weighing_record.last_sync_attempt = timezone.now()
                     weighing_record.save()
                     return True
                 else:
-                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    # Handle error response
                     weighing_record.is_synced = False
                     weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.sync_error_message = response.text
+                    weighing_record.sync_error_message = f"create-commercial-bale failed with status {response.status_code}: {response.text}"
                     weighing_record.save()
-                    return True
+                    return False
+                    
             except Exception as e:
-                print(f"Error sending to erp: {str(e)}")
+                print(f"Error calling create-commercial-bale: {str(e)}")
                 weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
                 weighing_record.is_synced = False
                 weighing_record.last_sync_attempt = timezone.now()
-                weighing_record.sync_error_message = str(e)
+                weighing_record.sync_error_message = f"Error calling create-commercial-bale: {str(e)}"
                 weighing_record.save()
                 return False
         else:
-            print('No session id found')
-            return False
+            # Use existing logic for other cases
+            # print("Sending to erp system")
+            print(f"Sending barcode {barcode}, net weight {net_weight}, and scale id {scale_id} to erp system")
+            # print('Session ID: ', session_id)
+            # session_id = request.COOKIES.get('erp_session_id')
+            # print('Session ID: ', session_id)
+            if session_id:
+                try:
+
+                    # Use different URL based on process type
+                    if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
+                        hessian_id = custom_data.get('hessian_id', '')
+                        lot_number = custom_data.get('lot_number', '')
+                        group_number = custom_data.get('group_number', '')
+                        url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={float(net_weight):.2f}&scale_id={scale_id}&hessian_id={hessian_id}&lot_number={lot_number}&group_number={group_number}"
+                        print(f"CTL Workflow URL: {url}")
+                    else:
+                        url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + f"{float(net_weight):.2f}" + "/" + barcode
+                        print(f"Standard URL: {url}")
+                    
+                    # print(f"Process type: {process_type}, Using URL: {url}")
+
+                    payload = {}
+                    headers = {
+                        # TODO: Add session id FROM COOKIE
+                        "cookie": f"session_id={session_id}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "insomnia/11.1.0",
+                    }
+
+                    response = requests.request("POST", url, json=payload, headers=headers)
+                    
+                    print(response.status_code)
+
+                    print(response.text)
+                    
+                    if response.status_code == 200:
+                        # Update weighing record with erp response
+                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                        weighing_record.is_synced = True
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.save()
+                        return True
+                    else:
+                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = response.text
+                        weighing_record.save()
+                        return True
+                except Exception as e:
+                    print(f"Error sending to erp: {str(e)}")
+                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    weighing_record.is_synced = False
+                    weighing_record.last_sync_attempt = timezone.now()
+                    weighing_record.sync_error_message = str(e)
+                    weighing_record.save()
+                    return False
+            else:
+                print('No session id found')
+                return False
     else:
         # TODO: Add other erp systems here
         print('ONLY ODOO IS SUPPORTED FOR NOW')
@@ -864,7 +951,7 @@ def sync_all_unsynced(request):
     weighing_records = WeighingRecord.objects.filter(is_synced=False)
     for weighing_record in weighing_records:
         print('Syncing weighing record: ', weighing_record.id)
-        send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, weighing_record.process.process_type)
+        send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, weighing_record.process.process_type, weighing_record.process.id)
     return redirect('scale:weighing_record_list')
 
 
