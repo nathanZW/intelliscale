@@ -33,7 +33,7 @@
         <!-- Left column - Machine/Weighing Data (50%) -->
         <div class="col-span-1 space-y-6">
             <!-- MACHINE Section -->
-            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200" style="height: 80vh; display: flex; flex-direction: column;">
+            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200" style="height: 82vh; display: flex; flex-direction: column;">
                 <div class="px-2 py-2 border-b border-zinc-200 flex justify-between">
                     <div class="flex flex-col">
                         <h2 class="text-lg font-medium text-zinc-900">MACHINE</h2>
@@ -153,8 +153,7 @@
                                    name="barcode" 
                                    class="block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2" 
                                    placeholder="Focus here and scan barcode"
-                                   autocomplete="off"
-                                   autofocus>
+                                   autocomplete="off">
                         </div>
 
                         <script>
@@ -1086,8 +1085,55 @@
             const currentProcessId = $('#process-select').val() || document.getElementById('process-id-input')?.value;
             const isMarshallingAllowed = currentProcessId && processMarshalling[currentProcessId];
             
-            // Create a field for each schema item
-            fieldsSchema.forEach(field => {
+            // Check if both lot_number and group_number fields exist in the schema
+            const lotNumberField = fieldsSchema.find(field => field.name.toLowerCase() === 'lot_number');
+            const groupNumberField = fieldsSchema.find(field => field.name.toLowerCase() === 'group_number');
+            
+            // Process fields, giving special treatment to lot_number and group_number
+            const processedFields = [];
+            for (let i = 0; i < fieldsSchema.length; i++) {
+                const field = fieldsSchema[i];
+                
+                // Special handling when both lot_number and group_number exist
+                if (lotNumberField && groupNumberField && 
+                    (field.name.toLowerCase() === 'lot_number' || field.name.toLowerCase() === 'group_number')) {
+                    
+                    // Add both fields together only once (when we encounter lot_number)
+                    if (field.name.toLowerCase() === 'lot_number') {
+                        processedFields.push({type: 'combined', lot_field: lotNumberField, group_field: groupNumberField});
+                    }
+                } else {
+                    // Regular field
+                    processedFields.push({type: 'single', field: field});
+                }
+            }
+            
+            // Create a field for each processed item
+            processedFields.forEach(processedItem => {
+                if (processedItem.type === 'combined') {
+                    // Create a container for both fields side by side
+                    const combinedContainer = document.createElement('div');
+                    combinedContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+                    
+                    // Create container for lot_number
+                    const lotFieldContainer = createFieldElement(processedItem.lot_field, isMarshallingAllowed);
+                    combinedContainer.appendChild(lotFieldContainer);
+                    
+                    // Create container for group_number
+                    const groupFieldContainer = createFieldElement(processedItem.group_field, isMarshallingAllowed);
+                    combinedContainer.appendChild(groupFieldContainer);
+                    
+                    // Add the combined container to the custom fields container
+                    customFieldsContainer.appendChild(combinedContainer);
+                } else {
+                    // Regular field handling
+                    const fieldContainer = createFieldElement(processedItem.field, isMarshallingAllowed);
+                    customFieldsContainer.appendChild(fieldContainer);
+                }
+            });
+            
+            // Helper function to create field elements
+            function createFieldElement(field, isMarshallingAllowed) {
                 const fieldId = `custom-field-${field.name.replace(/\s+/g, '-').toLowerCase()}`;
                 const fieldName = `custom_field_${field.name}`;
                 const required = field.required || false;
@@ -1288,9 +1334,6 @@
                         checkboxWrapper.appendChild(input);
                         checkboxWrapper.appendChild(checkboxLabel);
                         
-                        // Replace input with the wrapper
-                        input = checkboxWrapper;
-                        
                         // For marshalling fields, disable the input if marshalling is not enabled
                         if (isMarshallingField) {
                             input.querySelector('input[type="checkbox"]').disabled = !isMarshallingAllowed;
@@ -1334,9 +1377,6 @@
                                 radioWrapper.appendChild(radioContainer);
                             });
                         }
-                        
-                        // Replace input with the wrapper
-                        input = radioWrapper;
                         
                         // For marshalling fields, disable the input if marshalling is not enabled
                         if (isMarshallingField) {
@@ -1386,9 +1426,8 @@
                     fieldContainer.appendChild(helpText);
                 }
                 
-                // Add the field container to the custom fields container
-                customFieldsContainer.appendChild(fieldContainer);
-            });
+                return fieldContainer;
+            }
         }
         
         // Get Weight button functionality
@@ -1598,7 +1637,14 @@
                 return;
             }
             
-            // Validate barcode field (only required for non-WeighBridge processes)
+            // Validate hessian_id field first if it exists, then barcode field (only required for non-WeighBridge processes)
+            const hessianInput = document.querySelector('input[name="custom_field_hessian_id"]');
+            if (hessianInput && !hessianInput.value.trim()) {
+                alert('Please enter hessian ID (required when available)');
+                hessianInput.focus();
+                event.preventDefault();
+                return;
+            }
             const barcodeValue = document.getElementById('barcode-input').value.trim();
             if (processType !== 'WeighBridge' && !barcodeValue) {
                 alert('Please enter or scan a barcode (required for this process type)');
@@ -1611,8 +1657,15 @@
             if (processType === 'ctl_workflow' || processType === 'ctl_commercial_workflow') {
                 const activeDeliveryNoteId = document.getElementById('active-delivery-note-id').value;
                 if (!activeDeliveryNoteId) {
-                    alert('No active delivery note. Please scan a barcode to activate a delivery note first.');
-                    document.getElementById('barcode-input').focus();
+                    // Try to focus on hessian_id field first, fallback to barcode if hessian_id doesn't exist
+                    const hessianInput = document.querySelector('input[name="custom_field_hessian_id"]');
+                    if (hessianInput) {
+                        alert('No active delivery note. Please enter hessian ID to activate a delivery note.');
+                        hessianInput.focus();
+                    } else {
+                        alert('No active delivery note. Please scan a barcode to activate a delivery note first.');
+                        document.getElementById('barcode-input').focus();
+                    }
                     event.preventDefault();
                     return;
                 }
@@ -1965,7 +2018,13 @@
 
         // Auto-focus the input when page loads
         window.addEventListener('load', function() {
-            barcodeInput.focus();
+            // Try to focus on hessian_id field first, fallback to barcode if hessian_id doesn't exist
+            const hessianInput = document.querySelector('input[name="custom_field_hessian_id"]');
+            if (hessianInput) {
+                hessianInput.focus();
+            } else {
+                barcodeInput.focus();
+            }
         });
 
         // Keep focus on the input field (helpful for continuous scanning)
@@ -1974,7 +2033,12 @@
                 event.target.tagName !== 'INPUT' && 
                 event.target.tagName !== 'SELECT' &&
                 event.target.tagName !== 'TEXTAREA') {
-                if (document.activeElement !== barcodeInput) {
+                const hessianInput = document.querySelector('input[name="custom_field_hessian_id"]');
+                if (hessianInput) {
+                    if (document.activeElement !== hessianInput) {
+                        hessianInput.focus();
+                    }
+                } else if (document.activeElement !== barcodeInput) {
                     barcodeInput.focus();
                 }
             }
