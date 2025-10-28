@@ -174,19 +174,21 @@ class DeliveryNote(models.Model):
         for all scanned barcodes associated with this delivery note, ordered by scan time.
         """
         # Get all WeighingRecords for this delivery note that have a barcode
-        # We use .values() for efficiency and order by timestamp to prioritize the latest record
-        # if a barcode somehow has multiple records (though logic should prevent this)
-        records = WeighingRecord.objects.filter(
+        # We use .prefetch_related() to get the full records with custom_data
+        records_dict = {}
+        weighing_records = WeighingRecord.objects.filter(
             delivery_note=self,
             barcode__in=self.scanned_barcodes
-        ).values('barcode', 'net_weight', 'unit_of_measure').order_by('timestamp')
+        ).order_by('timestamp')
         
-        # Create a map for quick lookup, prioritizing the latest record if duplicates exist
-        barcode_map = {}
-        for record in records:
+        # Create a dict mapping barcode to the weighing record
+        for record in weighing_records:
             # Format net_weight to one decimal place (e.g., 14.2kg)
-            net_weight_str = f"{record['net_weight']:.1f}{record['unit_of_measure']}"
-            barcode_map[record['barcode']] = net_weight_str
+            net_weight_str = f"{record.net_weight:.1f}{record.unit_of_measure}"
+            records_dict[record.barcode] = {
+                'weight_display': net_weight_str,
+                'custom_data': record.custom_data
+            }
         
         # Re-order the results based on the original scanned_barcodes list order
         result = []
@@ -194,10 +196,15 @@ class DeliveryNote(models.Model):
             # Get bale information for additional data like group_number and lot_number
             bale_info = self.find_bale_by_barcode(barcode)
             
-            if barcode in barcode_map:
+            if barcode in records_dict:
+                # Use weighing record's custom data (user input) as primary source
+                custom_data = records_dict[barcode]['custom_data']
                 record_data = {
                     'barcode': barcode,
-                    'weight_display': barcode_map[barcode]
+                    'weight_display': records_dict[barcode]['weight_display'],
+                    # Prioritize weighing record data over odoo data
+                    'lot_number': custom_data.get('lot_number', ''),
+                    'group_number': custom_data.get('group_number', '')
                 }
             else:
                 # If no weighing record exists, check if we can get weight data from odoo_data
@@ -216,11 +223,12 @@ class DeliveryNote(models.Model):
                         'weight_display': 'Pending'
                     }
             
-            # Add group_number and lot_number if available in bale_info
+            # Override with data from odoo_data only if weighing record doesn't have it
+            # (This maintains backward compatibility and provides fallback data)
             if bale_info:
-                if 'group_number' in bale_info:
+                if not record_data.get('group_number') and 'group_number' in bale_info:
                     record_data['group_number'] = bale_info.get('group_number', '')
-                if 'lot_number' in bale_info:
+                if not record_data.get('lot_number') and 'lot_number' in bale_info:
                     record_data['lot_number'] = bale_info.get('lot_number', '')
             
             result.append(record_data)
