@@ -365,7 +365,7 @@
                         </div>
                     </div>
                     
-                    <!-- Bale Count Section (Hidden by default, shown when allow_bale_insert is enabled) -->
+                    <!-- Bale Count Section (Hidden - progress bar is always shown regardless of allow_bale_insert setting) -->
                     <div class="mt-4 hidden" id="bale-count-section">
                         <div class="flex justify-between text-sm text-zinc-700 mb-1">
                             <span>Bales Created</span>
@@ -1034,29 +1034,16 @@
             const progressBarSection = document.getElementById('progress-section');
             const baleCountSection = document.getElementById('bale-count-section');
             
-            if (allowBaleInsert) {
-                // Hide progress bar and show bale count
-                if (progressBarSection) {
-                    progressBarSection.classList.add('hidden');
-                }
-                if (baleCountSection) {
-                    baleCountSection.classList.remove('hidden');
-                }
-                
-                // Update barcode validation to allow unfamiliar barcodes
-                updateBarcodeValidationForBaleInsert(true);
-            } else {
-                // Show progress bar and hide bale count
-                if (progressBarSection) {
-                    progressBarSection.classList.remove('hidden');
-                }
-                if (baleCountSection) {
-                    baleCountSection.classList.add('hidden');
-                }
-                
-                // Restore normal barcode validation
-                updateBarcodeValidationForBaleInsert(false);
+            // Always show progress bar, regardless of allow_bale_insert setting
+            if (progressBarSection) {
+                progressBarSection.classList.remove('hidden');
             }
+            if (baleCountSection) {
+                baleCountSection.classList.add('hidden');
+            }
+            
+            // Update barcode validation based on allow_bale_insert setting
+            updateBarcodeValidationForBaleInsert(allowBaleInsert);
         }
         
         // Update barcode validation based on bale insert mode
