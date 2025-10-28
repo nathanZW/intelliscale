@@ -2239,14 +2239,27 @@
                 }
 
                 function populateBaleCustomFields(baleInfo) {
+                    // Check if allow_bale_insert is enabled for the current process
+                    const processId = processSelect ? processSelect.value : document.getElementById('process-id-input')?.value;
+                    const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
+                    const allowBaleInsert = processId && processAllowBaleInsert[processId] ? processAllowBaleInsert[processId] : false;
+                    
                     // Populate lot_number field if it exists in baleInfo and the field exists in the form
                     if (baleInfo.lot_number) {
                         const lotNumberField = document.querySelector('[name="custom_field_lot_number"]');
                         if (lotNumberField) {
                             lotNumberField.value = baleInfo.lot_number;
-                            lotNumberField.readOnly = true;
-                            lotNumberField.classList.add('bg-gray-100', 'cursor-not-allowed');
-                            lotNumberField.title = 'This field is populated from the scanned barcode and cannot be edited';
+                            // Only make field readonly if allow_bale_insert is NOT enabled
+                            if (!allowBaleInsert) {
+                                lotNumberField.readOnly = true;
+                                lotNumberField.classList.add('bg-gray-100', 'cursor-not-allowed');
+                                lotNumberField.title = 'This field is populated from the scanned barcode and cannot be edited';
+                            } else {
+                                // Ensure the field is editable when allow_bale_insert is enabled
+                                lotNumberField.readOnly = false;
+                                lotNumberField.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                                lotNumberField.title = '';
+                            }
                         }
                     }
                     
@@ -2255,9 +2268,36 @@
                         const groupNumberField = document.querySelector('[name="custom_field_group_number"]');
                         if (groupNumberField) {
                             groupNumberField.value = baleInfo.group_number;
-                            groupNumberField.readOnly = true;
-                            groupNumberField.classList.add('bg-gray-100', 'cursor-not-allowed');
-                            groupNumberField.title = 'This field is populated from the scanned barcode and cannot be edited';
+                            // Only make field readonly if allow_bale_insert is NOT enabled
+                            if (!allowBaleInsert) {
+                                groupNumberField.readOnly = true;
+                                groupNumberField.classList.add('bg-gray-100', 'cursor-not-allowed');
+                                groupNumberField.title = 'This field is populated from the scanned barcode and cannot be edited';
+                            } else {
+                                // Ensure the field is editable when allow_bale_insert is enabled
+                                groupNumberField.readOnly = false;
+                                groupNumberField.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                                groupNumberField.title = '';
+                            }
+                        }
+                    }
+                    
+                    // Populate hessian_id field if it exists in baleInfo and the field exists in the form
+                    if (baleInfo.hessian_id) {
+                        const hessianField = document.querySelector('[name="custom_field_hessian_id"]');
+                        if (hessianField) {
+                            hessianField.value = baleInfo.hessian_id;
+                            // Only make field readonly if allow_bale_insert is NOT enabled
+                            if (!allowBaleInsert) {
+                                hessianField.readOnly = true;
+                                hessianField.classList.add('bg-gray-100', 'cursor-not-allowed');
+                                hessianField.title = 'This field is populated from the scanned barcode and cannot be edited';
+                            } else {
+                                // Ensure the field is editable when allow_bale_insert is enabled
+                                hessianField.readOnly = false;
+                                hessianField.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                                hessianField.title = '';
+                            }
                         }
                     }
                 }
@@ -2483,6 +2523,14 @@
         let deliveryNoteForUpdate = null;
 
         function showRecallModal(barcode, deliveryNote) {
+            // Check if there is an active delivery note before showing the recall modal
+            const activeDeliveryNoteId = document.getElementById('active-delivery-note-id');
+            if (!activeDeliveryNoteId || !activeDeliveryNoteId.value) {
+                // No active delivery note, show error notification instead of recall modal
+                showNotification('Cannot recall and update: No active delivery note. Please scan a valid barcode to activate a delivery note first.', 'error');
+                return;
+            }
+            
             barcodeToRecall = barcode;
             deliveryNoteForUpdate = deliveryNote;
             recallModal.classList.remove('hidden');
