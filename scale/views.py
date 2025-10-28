@@ -2093,6 +2093,13 @@ def find_delivery_note_by_barcode(request):
                     dnote.is_being_scanned = True
                     dnote.save()
 
+                # Determine which total bales to use based on active process settings
+                active_process = WeighingProcess.objects.filter(is_active=True).first()  # Get the active process
+                if active_process and active_process.allow_bale_insert:
+                    total_bales = dnote.get_bale_count_delivered()
+                else:
+                    total_bales = dnote.get_bale_count()
+                
                 bale_info = dnote.find_bale_by_barcode(barcode)
                 return JsonResponse({
                     'success': True,
@@ -2101,10 +2108,10 @@ def find_delivery_note_by_barcode(request):
                         'delivery_note_number': dnote.delivery_note_number,
                         'grower_name': dnote.get_grower_name(),
                         'grower_number': dnote.get_grower_number(),
-                        'total_bales': dnote.get_bale_count(),
+                        'total_bales': total_bales,
                         'scanned_bales': dnote.scanned_bales_count,
                         'scanned_records_data': dnote.get_scanned_records_data(),
-                        'remaining_bales': dnote.get_remaining_bales_count(),
+                        'remaining_bales': max(0, total_bales - dnote.scanned_bales_count),
                         'location_name': dnote.get_location_name(),
                         'selling_point_name': dnote.get_selling_point_name(),
                         'preferred_sale_date': dnote.get_preferred_sale_date(),
@@ -2149,6 +2156,13 @@ def activate_delivery_note(request, pk):
             dnote.is_being_scanned = True
             dnote.save()
 
+            # Determine which total bales to use based on active process settings
+            active_process = WeighingProcess.objects.filter(is_active=True).first()  # Get the active process
+            if active_process and active_process.allow_bale_insert:
+                total_bales = dnote.get_bale_count_delivered()
+            else:
+                total_bales = dnote.get_bale_count()
+            
             return JsonResponse({
                 'success': True,
                 'delivery_note': {
@@ -2156,10 +2170,10 @@ def activate_delivery_note(request, pk):
                     'delivery_note_number': dnote.delivery_note_number,
                     'grower_name': dnote.get_grower_name(),
                     'grower_number': dnote.get_grower_number(),
-                    'total_bales': dnote.get_bale_count(),
+                    'total_bales': total_bales,
                     'scanned_bales': dnote.scanned_bales_count,
                     'scanned_records_data': dnote.get_scanned_records_data(),
-                    'remaining_bales': dnote.get_remaining_bales_count(),
+                    'remaining_bales': max(0, total_bales - dnote.scanned_bales_count),
                     'location_name': dnote.get_location_name(),
                     'selling_point_name': dnote.get_selling_point_name(),
                     'preferred_sale_date': dnote.get_preferred_sale_date(),
@@ -2290,12 +2304,19 @@ def recall_and_update_bale(request):
                     delivery_note.save()
                 
                 # Update the delivery note's scanned records data to reflect the change
+                # Determine which total bales to use based on active process settings
+                active_process = WeighingProcess.objects.filter(is_active=True).first()  # Get the active process
+                if active_process and active_process.allow_bale_insert:
+                    total_bales = delivery_note.get_bale_count_delivered()
+                else:
+                    total_bales = delivery_note.get_bale_count()
+                
                 response_data = {
                     'success': True,
                     'message': f'Bale {barcode} recalled (set to minimal weight) and removed from records. You can now scan it again for a new weighing.',
                     'delivery_note': {
                         'scanned_bales': delivery_note.scanned_bales_count,
-                        'total_bales': delivery_note.get_bale_count(),
+                        'total_bales': total_bales,
                         'scanned_records_data': delivery_note.get_scanned_records_data(),
                     },
                     'dnote_closed': delivery_note.scanned_bales_count == 0,  # Delivery note closed if all bales done
@@ -2307,12 +2328,19 @@ def recall_and_update_bale(request):
             else:
                 # If no record was found to delete, at least the ERP was updated
                 # We just return success but don't modify delivery note counts
+                # Determine which total bales to use based on active process settings
+                active_process = WeighingProcess.objects.filter(is_active=True).first()  # Get the active process
+                if active_process and active_process.allow_bale_insert:
+                    total_bales = delivery_note.get_bale_count_delivered()
+                else:
+                    total_bales = delivery_note.get_bale_count()
+                
                 response_data = {
                     'success': True,
                     'message': f'Bale {barcode} weight set to 0 in ERP. You can now scan it again for a new weighing.',
                     'delivery_note': {
                         'scanned_bales': delivery_note.scanned_bales_count,
-                        'total_bales': delivery_note.get_bale_count(),
+                        'total_bales': total_bales,
                         'scanned_records_data': delivery_note.get_scanned_records_data(),
                     },
                     'dnote_closed': delivery_note.scanned_bales_count == 0,

@@ -284,8 +284,8 @@ class DeliveryNote(models.Model):
         return self.odoo_data.get('total_mass', 0)
     
     def get_bale_count(self):
-        """Get number of bales"""
-        return self.odoo_data.get('number_of_bales', 0)
+        """Get number of bales - if associated process allows bale insert, use number_of_bales_delivered instead"""
+        return self._get_total_bales_for_process()
     
     def get_bale_count_delivered(self):
         """Get number of bales delivered"""
@@ -328,9 +328,21 @@ class DeliveryNote(models.Model):
                 return bale
         return None
     
+    def _get_total_bales_for_process(self):
+        """Helper method to get the appropriate total bales based on the associated process"""
+        # Since there's no direct relationship between DeliveryNote and WeighingProcess,
+        # we'll look for the first associated WeighingRecord to determine the process
+        first_weighing_record = self.weighingrecord_set.first()
+        if first_weighing_record and first_weighing_record.process and first_weighing_record.process.allow_bale_insert:
+            # If bale insert is allowed, use number of bales delivered
+            return self.odoo_data.get('number_of_bales_delivered', 0)
+        else:
+            # Otherwise, use the original number of bales
+            return self.odoo_data.get('number_of_bales', 0)
+    
     def get_remaining_bales_count(self):
         """Get number of bales remaining to be scanned"""
-        total_bales = self.odoo_data.get('number_of_bales', 0)
+        total_bales = self._get_total_bales_for_process()
         return max(0, total_bales - self.scanned_bales_count)
     
     def is_scanning_complete(self):
