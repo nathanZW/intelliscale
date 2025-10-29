@@ -618,19 +618,21 @@ def weighing_station(request):
                 # Add barcode to scanned list (this handles increment automatically)
                 if delivery_note.add_scanned_barcode(barcode):
                     delivery_note.save()
-                    messages.success(request, f'Bale {barcode} scanned successfully.')
+                    # messages.success(request, f'Bale {barcode} scanned successfully.')
                 else:
                     # This shouldn't happen due to can_accept_barcode check, but just in case
-                    messages.warning(request, f'Bale {barcode} was already scanned.')
+                    # messages.warning(request, f'Bale {barcode} was already scanned.')
+                    pass
                 
                 # Check if scanning is complete
                 if delivery_note.is_scanning_complete():
                     # Do not set is_being_scanned = False here. User must confirm closure.
                     delivery_note.save()
-                    messages.success(request, f'Delivery note {delivery_note.delivery_note_number} scanning completed! All {delivery_note.get_bale_count()} bales have been scanned. Please confirm closure.')
+                    # messages.success(request, f'Delivery note {delivery_note.delivery_note_number} scanning completed! All {delivery_note.get_bale_count()} bales have been scanned. Please confirm closure.')
                 else:
                     remaining = delivery_note.get_remaining_bales_count()
-                    messages.success(request, f'Bale scanned successfully. {remaining} bales remaining for delivery note {delivery_note.delivery_note_number}.')
+                    # messages.success(request, f'Bale scanned successfully. {remaining} bales remaining for delivery note {delivery_note.delivery_note_number}.')
+                    pass
             
             # Send barcode, mass and scale id to erp system (if record created successfully)
             if weighing_record:
@@ -645,7 +647,8 @@ def weighing_station(request):
                 weighing_record.save()
                 
                 # Add a message indicating that printing was triggered
-                messages.success(request, 'Weighing record created and sent to printer.')
+                # messages.success(request, 'Weighing record created and sent to printer.')
+                pass
                 
                 # TODO: Implement actual printing functionality
                 # This would typically involve generating a PDF and sending it to a printer
