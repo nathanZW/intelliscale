@@ -4,7 +4,7 @@
 PROJECT_ROOT=$(pwd)
 VIRTUAL_ENV_PATH="/home/nathan/Desktop/intelliscale/.venv"
 APP_MODULE="core.celery"
-
+#
 # PID and log file paths (create a logs directory first)
 PIDFILE_WORKER="$PROJECT_ROOT/celery_worker.pid"
 PIDFILE_BEAT="$PROJECT_ROOT/celery_beat.pid"
