@@ -6,8 +6,8 @@
 set -e  # Exit on any error
 
 # Configuration
-PROJECT_DIR="/home/ben/Documents/eport/intelliscale"
-VENV_PATH="$PROJECT_DIR/venv"  # Adjust this to your virtual environment path
+PROJECT_DIR="/home/nathan/Documents/eport/intelliscale"
+VENV_PATH="$PROJECT_DIR/.venv"  # Adjust this to your virtual environment path
 LOG_DIR="$PROJECT_DIR/logs"
 DJANGO_PORT=8000
 

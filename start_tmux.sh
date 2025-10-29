@@ -3,7 +3,7 @@
 # IntelliScale Startup Script with Tmux - Shows each service in separate panes
 # Requires tmux to be installed: sudo apt install tmux
 
-PROJECT_DIR="/home/nathan/Desktop/eport/intelliscale"
+PROJECT_DIR="/home/nathan/Desktop/intelliscale"
 VENV_PATH="$PROJECT_DIR/.venv"
 SESSION_NAME="intelliscale"
 

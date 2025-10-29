@@ -3,8 +3,8 @@
 # Simple IntelliScale Startup Script - Shows logs in terminal
 # Use this for development when you want to see logs directly
 
-PROJECT_DIR="/home/ben/Documents/eport/intelliscale"
-VENV_PATH="$PROJECT_DIR/venv"
+PROJECT_DIR="/home/nathan/Documents/eport/intelliscale"
+VENV_PATH="$PROJECT_DIR/.venv"
 
 # Colors
 GREEN='\033[0;32m'
