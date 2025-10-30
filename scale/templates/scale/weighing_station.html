@@ -230,6 +230,67 @@
                     </div> {% endcomment %}
                 </div>
             </div> 
+
+            <!-- Product Selection Card -->
+            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+                <div class="px-3 py-2 border-b border-zinc-200">
+                    <h2 class="text-lg font-medium text-zinc-900">PRODUCT</h2>
+                </div>
+                <div class="p-3">
+                    <div id="product-display">
+                        {% if products|length == 1 %}
+                            <div id="default-product">
+                                <label class="block text-sm font-medium text-zinc-700 mb-1">Product</label>
+                                <div class="py-2 px-3 bg-zinc-100 rounded text-zinc-900">{{ products.0.name }}</div>
+                                <input type="hidden" id="product-id-input" name="product_id" value="{{ products.0.id }}">
+                            </div>
+                        {% elif products|length == 0 %}
+                            <div id="no-product" class="text-red-600 text-sm">No active product available. Please activate a product.</div>
+                        {% else %}
+                            <div id="multiple-products" class="text-red-600 text-sm">Multiple active products found. Please ensure only one product is active.</div>
+                        {% endif %}
+                        
+                        <!-- Delivery Note Product Override (hidden by default) -->
+                        <div id="delivery-note-product" class="hidden">
+                            <label class="block text-sm font-medium text-zinc-700 mb-1">Product <span class="text-blue-600 text-xs">(from delivery note)</span></label>
+                            <div id="delivery-note-product-name" class="py-2 px-3 bg-blue-50 border border-blue-200 rounded text-zinc-900"></div>
+                            <input type="hidden" id="delivery-note-product-id" name="product_id" value="">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Weighing Process Card -->
+            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+                <div class="px-3 py-2 border-b border-zinc-200">
+                    <h2 class="text-lg font-medium text-zinc-900">WEIGHING PROCESS</h2>
+                </div>
+                <div class="p-3 hidden">
+                    <div>
+                        <label for="process-select" class="block text-sm font-medium text-zinc-700 mb-1">Weighing Process</label>
+                        <select id="process-select" name="process_id" class="block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-1">
+                            <option value="">Select a process...</option>
+                            {% for process in processes %}
+                                <option value="{{ process.id }}" data-process-type="{{ process.process_type }}">{{ process.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="p-3">
+                    {% if processes|length == 1 %}
+                        <div>
+                            <label class="block text-sm font-medium text-zinc-700 mb-1">Weighing Process</label>
+                            <div class="py-2 px-3 bg-zinc-100 rounded text-zinc-900">{{ processes.0.name }}</div>
+                            <input type="hidden" id="process-id-input" name="process_id" value="{{ processes.0.id }}" data-process-type="{{ processes.0.process_type }}">
+                        </div>
+                    {% elif processes|length == 0 %}
+                        <div class="text-red-600 text-sm">No active weighing process available. Please activate a process.</div>
+                    {% else %}
+                        <div class="text-red-600 text-sm">Multiple active weighing processes found. Please ensure only one process is active.</div>
+                    {% endif %}
+                </div>
+ 
+            </div>
         </div>
 
         <!-- Right column - Scale Connection (50%) -->
@@ -402,67 +463,6 @@
                 <input type="hidden" id="active-delivery-note-id" value="{% if active_delivery_note %}{{ active_delivery_note.id }}{% endif %}">
             </div>
 
-            
-            <!-- Product Selection Card -->
-            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
-                <div class="px-3 py-2 border-b border-zinc-200">
-                    <h2 class="text-lg font-medium text-zinc-900">PRODUCT</h2>
-                </div>
-                <div class="p-3">
-                    <div id="product-display">
-                        {% if products|length == 1 %}
-                            <div id="default-product">
-                                <label class="block text-sm font-medium text-zinc-700 mb-1">Product</label>
-                                <div class="py-2 px-3 bg-zinc-100 rounded text-zinc-900">{{ products.0.name }}</div>
-                                <input type="hidden" id="product-id-input" name="product_id" value="{{ products.0.id }}">
-                            </div>
-                        {% elif products|length == 0 %}
-                            <div id="no-product" class="text-red-600 text-sm">No active product available. Please activate a product.</div>
-                        {% else %}
-                            <div id="multiple-products" class="text-red-600 text-sm">Multiple active products found. Please ensure only one product is active.</div>
-                        {% endif %}
-                        
-                        <!-- Delivery Note Product Override (hidden by default) -->
-                        <div id="delivery-note-product" class="hidden">
-                            <label class="block text-sm font-medium text-zinc-700 mb-1">Product <span class="text-blue-600 text-xs">(from delivery note)</span></label>
-                            <div id="delivery-note-product-name" class="py-2 px-3 bg-blue-50 border border-blue-200 rounded text-zinc-900"></div>
-                            <input type="hidden" id="delivery-note-product-id" name="product_id" value="">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Weighing Process Card -->
-            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
-                <div class="px-3 py-2 border-b border-zinc-200">
-                    <h2 class="text-lg font-medium text-zinc-900">WEIGHING PROCESS</h2>
-                </div>
-                <div class="p-3 hidden">
-                    <div>
-                        <label for="process-select" class="block text-sm font-medium text-zinc-700 mb-1">Weighing Process</label>
-                        <select id="process-select" name="process_id" class="block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-1">
-                            <option value="">Select a process...</option>
-                            {% for process in processes %}
-                                <option value="{{ process.id }}" data-process-type="{{ process.process_type }}">{{ process.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="p-3">
-                    {% if processes|length == 1 %}
-                        <div>
-                            <label class="block text-sm font-medium text-zinc-700 mb-1">Weighing Process</label>
-                            <div class="py-2 px-3 bg-zinc-100 rounded text-zinc-900">{{ processes.0.name }}</div>
-                            <input type="hidden" id="process-id-input" name="process_id" value="{{ processes.0.id }}" data-process-type="{{ processes.0.process_type }}">
-                        </div>
-                    {% elif processes|length == 0 %}
-                        <div class="text-red-600 text-sm">No active weighing process available. Please activate a process.</div>
-                    {% else %}
-                        <div class="text-red-600 text-sm">Multiple active weighing processes found. Please ensure only one process is active.</div>
-                    {% endif %}
-                </div>
- 
-            </div>
             
             <!-- Notes Card (Moved from DATA section) -->
             <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
