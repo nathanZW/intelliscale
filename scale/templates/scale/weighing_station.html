@@ -2491,7 +2491,7 @@
             const activeDeliveryNoteId = document.getElementById('active-delivery-note-id');
             if (!activeDeliveryNoteId || !activeDeliveryNoteId.value) {
                 // No active delivery note, show error notification instead of recall modal
-                showNotification('Cannot recall and update: No active delivery note. Please scan a valid barcode to activate a delivery note first.', 'error');
+                showNotification('Cannot recall and update: This bale has already passed through the scale', 'error');
                 return;
             }
             
