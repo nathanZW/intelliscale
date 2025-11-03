@@ -1386,6 +1386,66 @@ def recall_bale(request, pk):
                     'message': 'Company API settings not configured.'
                 })
             
+            # Try to get session ID from cookies or attempt authentication if needed
+            session_id = request.COOKIES.get('session_id')
+            
+            # Attempt authentication if no session_id exists
+            if not session_id:
+                auth_url = f"{company_settings.api_url}/web/session/authenticate"
+                auth_payload = {
+                    "jsonrpc": "2.0",
+                    "params": {
+                        "db": company_settings.database_name,
+                        "login": company_settings.erp_username,
+                        "password": company_settings.erp_password
+                    }
+                }
+                auth_headers = {
+                    "Content-Type": "application/json",
+                    "User-Agent": "insomnia/11.0.2"
+                }
+                
+                print("Making authentication request to:", auth_url)
+                auth_response = requests.post(auth_url, json=auth_payload, headers=auth_headers, timeout=10)
+                
+                if auth_response.status_code == 200:
+                    auth_result = auth_response.json()
+                    if 'result' in auth_result and auth_result['result'] is not None:
+                        # Get session ID from response cookies
+                        new_session_id = auth_response.cookies.get('session_id')
+                        if new_session_id:
+                            session_id = new_session_id
+                        else:
+                            # If no session_id in cookies, try to get from result
+                            session_id = auth_result['result'].get('session_id')
+                            
+                        if session_id:
+                            print(f"Successfully authenticated with session ID: {session_id}")
+                        else:
+                            return JsonResponse({
+                                'success': False,
+                                'message': 'Authentication succeeded but no valid session ID returned from ERP'
+                            })
+                    elif 'error' in auth_result:
+                        error_message = auth_result['error'].get('data', {}).get('message', 'Unknown authentication error')
+                        print('Authentication error:', error_message)
+                        return JsonResponse({
+                            'success': False,
+                            'message': f'ERP authentication failed: {error_message}'
+                        })
+                    else:
+                        print('Failed to authenticate - unexpected response format:', auth_response.text)
+                        return JsonResponse({
+                            'success': False,
+                            'message': f'ERP authentication failed: Unexpected response format'
+                        })
+                else:
+                    print('Failed to authenticate:', auth_response.text)
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'ERP authentication failed with status {auth_response.status_code}: {auth_response.text}'
+                    })
+            
             # Get the existing weighing record to retrieve hessian value
             weighing_record = WeighingRecord.objects.filter(
                 delivery_note=delivery_note,
@@ -1403,9 +1463,16 @@ def recall_bale(request, pk):
             else:
                 api_url = base_url
             
-            response = requests.post(api_url, timeout=10)
+            # Make the request with proper session headers
+            headers = {
+                "cookie": f"session_id={session_id}",
+                "User-Agent": "insomnia/11.1.0"
+            }
             
-            if response.status_code == 200:
+            response = requests.post(api_url, headers=headers, timeout=10)
+            
+            # Check response status codes
+            if response.status_code in [200, 201]:  # Success codes
                 # Success - update local database
                 # Remove barcode from scanned_barcodes
                 delivery_note.scanned_barcodes = [b for b in delivery_note.scanned_barcodes if b != barcode]
@@ -1428,18 +1495,47 @@ def recall_bale(request, pk):
                     'scanned_count': delivery_note.scanned_bales_count,
                     'total_count': delivery_note.get_bale_count()
                 })
-            else:
+            elif response.status_code >= 400:
+                # Handle client/server error responses
+                error_message = response.text
+                # Try to extract a more user-friendly error message if available
+                try:
+                    response_json = response.json()
+                    if 'error' in response_json and 'data' in response_json['error']:
+                        error_message = response_json['error']['data'].get('message', response.text)
+                except:
+                    pass  # If we can't parse the JSON, use the raw response text
                 return JsonResponse({
                     'success': False,
-                    'message': f'Failed to update bale in Odoo. Status: {response.status_code}'
+                    'message': f'Failed to update bale in Odoo. Status: {response.status_code}. Error: {error_message}'
+                })
+            else:
+                # Other status codes that aren't 200/201 but not 400+ errors
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Unexpected response from Odoo. Status: {response.status_code}. Response: {response.text}'
                 })
                 
+        except requests.exceptions.ConnectionError as e:
+            print(f"Connection error during recall_bale: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Connection error communicating with Odoo: {str(e)}'
+            })
+        except requests.exceptions.Timeout as e:
+            print(f"Timeout error during recall_bale: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Timeout error communicating with Odoo: {str(e)}'
+            })
         except requests.RequestException as e:
+            print(f"Request error during recall_bale: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'message': f'Error communicating with Odoo: {str(e)}'
             })
         except Exception as e:
+            print(f"Unexpected error in recall_bale: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'message': f'Unexpected error: {str(e)}'
