@@ -440,13 +440,28 @@
                     <!-- Scanned Barcodes List -->
                     <div class="mt-4" {% if not active_delivery_note or not active_delivery_note.scanned_records_data %}style="display: none;"{% endif %}>
                         <h4 class="text-sm font-medium text-zinc-700 mb-2">Scanned Barcodes ({% if active_delivery_note %}{{ active_delivery_note.scanned_records_data|length }}{% else %}0{% endif %})</h4>
-                        <div class="max-h-32 overflow-y-auto bg-zinc-50 rounded-md p-2" id="scanned-barcodes-list">
+                        <div class="max-h-64 overflow-y-auto bg-zinc-50 rounded-md p-2" id="scanned-barcodes-list">
                             {% if active_delivery_note %}
-                                {% for record in active_delivery_note.scanned_records_data %}
-                                <span class="inline-block bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded mr-1 mb-1">
-                                    {{ record.barcode }}-{{ record.weight_display }}{% if record.group_number or record.lot_number %}-{{ record.group_number|default:"" }}-{{ record.lot_number|default:"" }}{% endif %}
-                                </span>
-                                {% endfor %}
+                                <table class="min-w-full divide-y divide-zinc-200">
+                                    <thead class="bg-zinc-100">
+                                        <tr>
+                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Barcode</th>
+                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Weight</th>
+                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Group</th>
+                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Lot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-zinc-200">
+                                        {% for record in active_delivery_note.scanned_records_data %}
+                                        <tr class="bg-white even:bg-zinc-50">
+                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.barcode }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.weight_display }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.group_number|default:"" }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.lot_number|default:"" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
                             {% endif %}
                         </div>
                     </div>
