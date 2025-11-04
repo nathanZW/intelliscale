@@ -1406,8 +1406,8 @@ def recall_bale(request, pk):
                     }
                 }
                 auth_headers = {
-                    "Content-Type": "application/json",
-                    "User-Agent": "insomnia/11.0.2"
+                    "User-Agent": "insomnia/11.5.0",
+                    "X-API-Key": "9999888811110000"
                 }
                 
                 print("Making authentication request to:", auth_url)
@@ -1458,20 +1458,13 @@ def recall_bale(request, pk):
             ).first()
             
             # Build the API URL with hessian if available
-            base_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0"
-            if weighing_record and weighing_record.custom_data:
-                hessian_id = weighing_record.custom_data.get('hessian_id', '')
-                if hessian_id:
-                    api_url = f"{base_url}&hessian_id={hessian_id}"
-                else:
-                    api_url = base_url
-            else:
-                api_url = base_url
+            api_url = f"{company_settings.api_url}/api/bales/recall-bale/?barcode={barcode}"
             
             headers = {
                 "User-Agent": "insomnia/11.5.0",
                 "X-API-Key": "9999888811110000"
             }
+            
             response = requests.post(api_url, headers=headers, timeout=10)
             
             # Check response status codes
