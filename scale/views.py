@@ -19,6 +19,7 @@ import xmlrpc.client
 import socket
 from datetime import datetime
 import re
+import time
 
 # Scale Management Views
 @login_required
@@ -217,9 +218,14 @@ def get_weight(request, scale_id):
             try:
                 ser = serial.Serial(scale.com_port, 9600, timeout=2)
                 if ser.is_open:
+                    #clear any stale data from buffer
+                    for _ in range(3):
+                        ser.reset_input_buffer()
+                        time.sleep(0.05)
                     # Send command to get weight (this may vary by scale model)
                     ser.write(b"\r\n")  # Some scales need a CR/LF to trigger reading
                     # Read response
+                    time.sleep(0.3)
                     line = ser.readline()
                     # Decode bytes
                     try:
@@ -227,14 +233,16 @@ def get_weight(request, scale_id):
                     except Exception:
                         decoded = line.decode(errors='ignore').strip()
 
-                    print(f"Raw data from scale {scale.name}: '{decoded}'")
+                    print(f"Raw data from scale {scale.name}: '{decoded}' (bytes: {line})")
 
                     # Attempt to parse numeric weight from decoded string
                     # robustly looks for a number which may include decimal points or commas instead of using slices 
-                    numeric_match = re.search(r'[-+]?\d+(?:[.,]\d+)?', decoded)
+                    numeric_match = re.search(r'([-+]?\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', decoded, re.IGNORECASE)
 
                     if numeric_match:
-                        num_str = numeric_match.group(0).replace(',', '')
+                        num_str = numeric_match.group(1).replace(',', '')
+                        #not in use for now - holds the weights UOM
+                        unit = numeric_match.group(2).lower()
                         try:
                             weight = float(num_str)
                             print(f"Successfully parsed weight for scale {scale.name}: {weight}")
@@ -913,12 +921,12 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 print(f"Calling create-commercial-bale with params: {params}")
                 
                 payload = ""
-                headers = {
-                    "cookie": f"session_id={session_id}",
-                    "User-Agent": "insomnia/11.1.0"
-                }
                 
                 # Make the API call
+                headers = {
+                    "User-Agent": "insomnia/11.5.0",
+                    "X-API-Key": "9999888811110000"
+                }
                 response = requests.request("POST", url, data=payload, headers=headers, params=params)
                 
                 print(f"create-commercial-bale response status: {response.status_code}")
@@ -1001,12 +1009,9 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
 
                     payload = {}
                     headers = {
-                        # TODO: Add session id FROM COOKIE
-                        "cookie": f"session_id={session_id}",
-                        "Content-Type": "application/json",
-                        "User-Agent": "insomnia/11.1.0",
+                        "User-Agent": "insomnia/11.5.0",
+                        "X-API-Key": "9999888811110000"
                     }
-
                     response = requests.request("POST", url, json=payload, headers=headers)
                     
                     print(response.status_code)
@@ -1463,12 +1468,10 @@ def recall_bale(request, pk):
             else:
                 api_url = base_url
             
-            # Make the request with proper session headers
             headers = {
-                "cookie": f"session_id={session_id}",
-                "User-Agent": "insomnia/11.1.0"
+                "User-Agent": "insomnia/11.5.0",
+                "X-API-Key": "9999888811110000"
             }
-            
             response = requests.post(api_url, headers=headers, timeout=10)
             
             # Check response status codes
@@ -2513,7 +2516,11 @@ def recall_and_update_bale(request):
         
         # Using requests to communicate with the ERP to set mass to 0
         print(f"Recall and Update: Making API request to: {api_url}")
-        response = requests.post(api_url, timeout=10)
+        headers = {
+            "User-Agent": "insomnia/11.5.0",
+            "X-API-Key": "9999888811110000"
+        }
+        response = requests.post(api_url, headers=headers, timeout=10)
         print(f"Recall and Update: ERP response status: {response.status_code}")
         print(f"Recall and Update: ERP response text: {response.text}")
 
