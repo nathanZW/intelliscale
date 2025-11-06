@@ -346,24 +346,24 @@
                             <dd class="mt-1 text-sm text-zinc-900 font-semibold" id="active-dnote-number">{% if active_delivery_note %}{{ active_delivery_note.delivery_note_number }}{% else %}-{% endif %}</dd>
                         </div>
                         <div>
-                            <dt class="text-sm font-medium text-zinc-500">Grower</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-grower-name">{% if active_delivery_note %}{{ active_delivery_note.get_grower_name }}{% else %}-{% endif %}</dd>
+                            <dt class="text-sm font-medium text-zinc-500">Selling Point</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-selling-point">{% if active_delivery_note %}{{ active_delivery_note.get_selling_point_name }}{% else %}-{% endif %}</dd>
                         </div>
                         <div>
                             <dt class="text-sm font-medium text-zinc-500">Grower Number</dt>
                             <dd class="mt-1 text-sm text-zinc-900" id="active-grower-number">{% if active_delivery_note %}{{ active_delivery_note.get_grower_number }}{% else %}-{% endif %}</dd>
                         </div>
                         <div>
-                            <dt class="text-sm font-medium text-zinc-500">Location</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-location">{% if active_delivery_note %}{{ active_delivery_note.get_location_name }}{% else %}-{% endif %}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-sm font-medium text-zinc-500">Selling Point</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-selling-point">{% if active_delivery_note %}{{ active_delivery_note.get_selling_point_name }}{% else %}-{% endif %}</dd>
-                        </div>
-                        <div>
                             <dt class="text-sm font-medium text-zinc-500">Preferred Sale Date</dt>
                             <dd class="mt-1 text-sm text-zinc-900" id="active-sale-date">{% if active_delivery_note %}{{ active_delivery_note.get_preferred_sale_date }}{% else %}-{% endif %}</dd>
+                        </div>
+                        <div class="hidden">
+                            <dt class="text-sm font-medium text-zinc-500">Grower</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-grower-name">{% if active_delivery_note %}{{ active_delivery_note.get_grower_name }}{% else %}-{% endif %}</dd>
+                        </div>
+                        <div class="hidden">
+                            <dt class="text-sm font-medium text-zinc-500">Location</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-location">{% if active_delivery_note %}{{ active_delivery_note.get_location_name }}{% else %}-{% endif %}</dd>
                         </div>
                     </div>
                     
