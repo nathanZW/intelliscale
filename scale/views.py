@@ -484,31 +484,40 @@ def weighing_station(request):
                             delivery_note = DeliveryNote.objects.select_for_update().get(pk=found_delivery_note.pk)
 
                             # Check if this delivery note can accept this barcode
-                            if delivery_note.has_barcode_been_scanned(barcode):
-                                # This is a rescan/update, allow it to proceed
-                                pass
-                            elif not delivery_note.can_accept_barcode(barcode):
+                            if not delivery_note.can_accept_barcode(barcode):
                                 # Check if this is just a rescan of an already-scanned barcode from the same delivery note
                                 if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
                                     # This barcode belongs to this delivery note, allow rescan/update
-                                    pass
+                                    # But only if the delivery note is currently being scanned
+                                    if not delivery_note.is_being_scanned:
+                                        messages.error(request, f'Cannot recall and update. This bale has already been scanned for delivery note {delivery_note.delivery_note_number}.')
+                                        return redirect('scale:weighing_station')
                                 elif delivery_note.is_scanning_complete():
                                     messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
+                                    return redirect('scale:weighing_station')
+                                # Allow re-scans by checking this after can_accept_barcode
+                                elif delivery_note.has_barcode_been_scanned(barcode):
+                                    # This is a re-scan, so we allow it, but only if delivery note is already being scanned
+                                    if not delivery_note.is_being_scanned:
+                                        messages.error(request, f'Cannot recall and update. This bale has already been scanned for delivery note {delivery_note.delivery_note_number}.')
+                                        return redirect('scale:weighing_station')
                                 else:
                                     messages.error(request, f'Barcode {barcode} not found in delivery note {delivery_note.delivery_note_number}.')
-                                return redirect('scale:weighing_station')
-                            
-                            # Activate this delivery note for scanning if not already active
-                            currently_scanned = DeliveryNote.objects.filter(is_being_scanned=True).exclude(pk=delivery_note.pk).first()
-                            if currently_scanned:
-                                messages.error(request, f'Another delivery note ({currently_scanned.delivery_note_number}) is currently being scanned.')
-                                return redirect('scale:weighing_station')
-                            
-                            if not delivery_note.is_being_scanned:
-                                # Deactivate any other delivery notes
-                                DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
-                                delivery_note.is_being_scanned = True
-                                delivery_note.save()
+                                    return redirect('scale:weighing_station')
+                            else:
+                                # If the delivery note is not being scanned and the barcode can be accepted,
+                                # then activate this delivery note for scanning
+                                # Activate this delivery note for scanning if not already active
+                                currently_scanned = DeliveryNote.objects.filter(is_being_scanned=True).exclude(pk=delivery_note.pk).first()
+                                if currently_scanned:
+                                    messages.error(request, f'Another delivery note ({currently_scanned.delivery_note_number}) is currently being scanned.')
+                                    return redirect('scale:weighing_station')
+                                
+                                if not delivery_note.is_being_scanned:
+                                    # Deactivate any other delivery notes
+                                    DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
+                                    delivery_note.is_being_scanned = True
+                                    delivery_note.save()
                             
                         else:
                             messages.error(request, 'Barcode not found. Please scan the correct bale.')
@@ -2302,7 +2311,12 @@ def find_delivery_note_by_barcode(request):
                     # Check if this is just a rescan of an already-scanned barcode from the same delivery note
                     if dnote.is_scanning_complete() and dnote.find_bale_by_barcode(barcode):
                         # This barcode belongs to this delivery note, allow rescan/update
-                        pass
+                        # But only if the delivery note is currently being scanned
+                        if not dnote.is_being_scanned:
+                            return JsonResponse({
+                                'success': False, 
+                                'message': f'Delivery note {dnote.delivery_note_number} is already complete'
+                            })
                     elif dnote.is_scanning_complete():
                         return JsonResponse({
                             'success': False, 
@@ -2310,18 +2324,25 @@ def find_delivery_note_by_barcode(request):
                         })
                     # Allow re-scans by checking this after can_accept_barcode
                     elif dnote.has_barcode_been_scanned(barcode):
-                        pass # This is a re-scan, so we allow it
+                        # This is a re-scan, so we allow it, but only if delivery note is already being scanned
+                        if not dnote.is_being_scanned:
+                            return JsonResponse({
+                                'success': False, 
+                                'message': f'Cannot recall and update. This bale has already been scanned for delivery note {dnote.delivery_note_number}.'
+                            })
                     else:
                         return JsonResponse({
                             'success': False, 
                             'message': f'Barcode {barcode} not found in delivery note {dnote.delivery_note_number}'
                         })
-                # Activate this delivery note for scanning if not already active
-                if not dnote.is_being_scanned:
-                    # Deactivate any other delivery notes
-                    DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
-                    dnote.is_being_scanned = True
-                    dnote.save()
+                else:
+                    # If the delivery note is not being scanned and the barcode can be accepted,
+                    # then activate this delivery note for scanning
+                    if not dnote.is_being_scanned:
+                        # Deactivate any other delivery notes
+                        DeliveryNote.objects.filter(is_being_scanned=True).update(is_being_scanned=False)
+                        dnote.is_being_scanned = True
+                        dnote.save()
 
                 # Determine which total bales to use based on active process settings
                 active_process = WeighingProcess.objects.filter(is_active=True).first()  # Get the active process
