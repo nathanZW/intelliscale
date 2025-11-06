@@ -385,18 +385,18 @@
                                     <thead class="bg-zinc-100">
                                         <tr>
                                             <th class="px-2 py-2 text-sm font-medium text-zinc-500">Barcode</th>
-                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Weight</th>
                                             <th class="px-2 py-2 text-sm font-medium text-zinc-500">Group</th>
                                             <th class="px-2 py-2 text-sm font-medium text-zinc-500">Lot</th>
+                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Weight</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-zinc-200">
                                         {% for record in active_delivery_note.scanned_records_data %}
                                         <tr class="bg-white even:bg-zinc-50">
                                             <td class="px-2 py-2 text-sm text-zinc-900">{{ record.barcode }}</td>
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.weight_display }}</td>
                                             <td class="px-2 py-2 text-sm text-zinc-900">{{ record.group_number|default:"" }}</td>
                                             <td class="px-2 py-2 text-sm text-zinc-900">{{ record.lot_number|default:"" }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.weight_display }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
