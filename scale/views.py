@@ -589,32 +589,44 @@ def weighing_station(request):
                     existing_record = WeighingRecord.objects.filter(barcode=barcode, delivery_note=delivery_note).first()
                 
                 if existing_record:
-                    # Update existing record
-                    existing_record.scale = get_object_or_404(Scale, pk=scale_id)
-                    existing_record.weighing_scale_id = existing_record.scale.scale_id
-                    existing_record.product = get_object_or_404(Product, pk=product_id)
-                    existing_record.process = process
-                    existing_record.user = request.user
-                    existing_record.gross_weight = gross_weight
-                    existing_record.tare_weight = tare_weight
-                    existing_record.net_weight = net_weight
-                    existing_record.unit_of_measure = unit_of_measure
-                    existing_record.notes = notes
+                    # Update existing record - call ERP first
+                    erp_success = send_to_erp(barcode, net_weight, existing_record.weighing_scale_id, existing_record.id, request, custom_data, process.process_type, process.id)
                     
-                    # If marshalling is allowed, preserve existing marshalling fields (lot_number, group_number)
-                    # unless they are being explicitly updated in the current request
-                    if existing_record.custom_data and isinstance(existing_record.custom_data, dict):
-                        existing_record.custom_data.update(custom_data)
+                    if erp_success:
+                        # Only update the local record if ERP call was successful
+                        existing_record.scale = get_object_or_404(Scale, pk=scale_id)
+                        existing_record.weighing_scale_id = existing_record.scale.scale_id
+                        existing_record.product = get_object_or_404(Product, pk=product_id)
+                        existing_record.process = process
+                        existing_record.user = request.user
+                        existing_record.gross_weight = gross_weight
+                        existing_record.tare_weight = tare_weight
+                        existing_record.net_weight = net_weight
+                        existing_record.unit_of_measure = unit_of_measure
+                        existing_record.notes = notes
+                        
+                        # If marshalling is allowed, preserve existing marshalling fields (lot_number, group_number)
+                        # unless they are being explicitly updated in the current request
+                        if existing_record.custom_data and isinstance(existing_record.custom_data, dict):
+                            existing_record.custom_data.update(custom_data)
+                        else:
+                            existing_record.custom_data = custom_data
+                        existing_record.is_synced = True  # Mark as synced since ERP call succeeded
+                        existing_record.save()
+                        weighing_record = existing_record
+                        messages.success(request, f'Weight for bale {barcode} updated successfully.')
                     else:
-                        existing_record.custom_data = custom_data
-                    existing_record.is_synced = False  # Mark for resync
-                    existing_record.save()
-                    weighing_record = existing_record
-                    messages.success(request, f'Weight for bale {barcode} updated successfully.')
+                        # Get the error message from the unsynced record
+                        unsynced_record = WeighingRecord.objects.filter(barcode=barcode, net_weight=net_weight, is_synced=False).order_by('-timestamp').first()
+                        error_message = "Unknown error occurred during ERP communication"
+                        if unsynced_record and unsynced_record.sync_error_message:
+                            error_message = unsynced_record.sync_error_message
+                        messages.error(request, f'Error sending to ERP: {error_message}')
+                        return redirect('scale:weighing_station')
                 else:
-                    # Create new record as normal
+                    # Create new record only if ERP call is successful - call ERP first
                     scale = get_object_or_404(Scale, pk=scale_id)
-                    weighing_record = WeighingRecord.objects.create(
+                    temp_weighing_record = WeighingRecord(
                         scale=scale,
                         weighing_scale_id=scale.scale_id,
                         product_id=product_id,
@@ -629,6 +641,39 @@ def weighing_station(request):
                         delivery_note=delivery_note,
                         barcode=barcode
                     )
+                    
+                    # Call ERP first
+                    erp_success = send_to_erp(barcode, net_weight, temp_weighing_record.weighing_scale_id, None, request, temp_weighing_record.custom_data, process.process_type, process.id)
+                    
+                    if erp_success:
+                        # Now create the actual database record if ERP call was successful
+                        weighing_record = WeighingRecord.objects.create(
+                            scale=scale,
+                            weighing_scale_id=scale.scale_id,
+                            product_id=product_id,
+                            process_id=process_id,
+                            user=request.user,
+                            gross_weight=gross_weight,
+                            tare_weight=tare_weight,
+                            net_weight=net_weight,
+                            unit_of_measure=unit_of_measure,
+                            notes=notes,
+                            custom_data=custom_data,
+                            delivery_note=delivery_note,
+                            barcode=barcode
+                        )
+                        # Since ERP was successful, mark the record as synced
+                        weighing_record.is_synced = True
+                        weighing_record.save()
+                        messages.success(request, 'Weighing record created successfully.')
+                    else:
+                        # Get the error message from the unsynced record
+                        unsynced_record = WeighingRecord.objects.filter(barcode=barcode, net_weight=net_weight, is_synced=False).order_by('-timestamp').first()
+                        error_message = "Unknown error occurred during ERP communication"
+                        if unsynced_record and unsynced_record.sync_error_message:
+                            error_message = unsynced_record.sync_error_message
+                        messages.error(request, f'Error sending to ERP: {error_message}')
+                        return redirect('scale:weighing_station')
             
             # Handle CTL Workflow completion logic
             if process.process_type in ['ctl_workflow', 'ctl_commercial_workflow'] and weighing_record and delivery_note:
@@ -651,10 +696,6 @@ def weighing_station(request):
                     # messages.success(request, f'Bale scanned successfully. {remaining} bales remaining for delivery note {delivery_note.delivery_note_number}.')
                     pass
             
-            # Send barcode, mass and scale id to erp system (if record created successfully)
-            if weighing_record:
-                send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, process.process_type, process.id)
-            
             print_after_save = request.POST.get('print_after_save') == 'true'
             
             if print_after_save:
@@ -671,7 +712,8 @@ def weighing_station(request):
                 # This would typically involve generating a PDF and sending it to a printer
                 # For now, just redirect to a print view or mock this functionality
             else:
-                messages.success(request, 'Weighing record created successfully.')
+                # Message already set above based on ERP success/failure
+                pass
                 
             return redirect('scale:weighing_station')
             
@@ -812,77 +854,85 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         print(f"Successfully authenticated with session ID: {session_id}")
                     else:
                         print("Authentication succeeded but no valid session ID returned")
-                        # Update weighing record with authentication error
-                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                        weighing_record.is_synced = False
-                        weighing_record.last_sync_attempt = timezone.now()
-                        weighing_record.sync_error_message = "Authentication succeeded but no valid session ID returned from ERP"
-                        weighing_record.save()
+                        # Update weighing record with authentication error if weighing_record_id is provided
+                        if weighing_record_id:
+                            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                            weighing_record.is_synced = False
+                            weighing_record.last_sync_attempt = timezone.now()
+                            weighing_record.sync_error_message = "Authentication succeeded but no valid session ID returned from ERP"
+                            weighing_record.save()
                         return False
                 elif 'error' in result:
                     error_message = result['error'].get('data', {}).get('message', 'Unknown authentication error')
                     print('Authentication error:', error_message)
-                    # Update weighing record with authentication error
-                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                    weighing_record.is_synced = False
-                    weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.sync_error_message = f"ERP authentication failed: {error_message}"
-                    weighing_record.save()
+                    # Update weighing record with authentication error if weighing_record_id is provided
+                    if weighing_record_id:
+                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"ERP authentication failed: {error_message}"
+                        weighing_record.save()
                     return False
                 else:
                     print('Failed to authenticate - unexpected response format:', response.text)
-                    # Update weighing record with authentication error
-                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                    weighing_record.is_synced = False
-                    weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.sync_error_message = f"ERP authentication failed: Unexpected response format - {response.text}"
-                    weighing_record.save()
+                    # Update weighing record with authentication error if weighing_record_id is provided
+                    if weighing_record_id:
+                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"ERP authentication failed: Unexpected response format - {response.text}"
+                        weighing_record.save()
                     return False
             else:
                 print('Failed to authenticate:', response.text)
-                # Update weighing record with authentication error
-                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                weighing_record.is_synced = False
-                weighing_record.last_sync_attempt = timezone.now()
-                weighing_record.sync_error_message = f"ERP authentication failed with status {response.status_code}: {response.text}"
-                weighing_record.save()
+                # Update weighing record with authentication error if weighing_record_id is provided
+                if weighing_record_id:
+                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    weighing_record.is_synced = False
+                    weighing_record.last_sync_attempt = timezone.now()
+                    weighing_record.sync_error_message = f"ERP authentication failed with status {response.status_code}: {response.text}"
+                    weighing_record.save()
                 return False
                 
         except requests.exceptions.ConnectionError as e:
             print(f"Connection error during ERP authentication: {str(e)}")
-            # Update weighing record with connection error
-            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-            weighing_record.is_synced = False
-            weighing_record.last_sync_attempt = timezone.now()
-            weighing_record.sync_error_message = f"ERP connection error during authentication: {str(e)}"
-            weighing_record.save()
+            # Update weighing record with connection error if weighing_record_id is provided
+            if weighing_record_id:
+                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                weighing_record.is_synced = False
+                weighing_record.last_sync_attempt = timezone.now()
+                weighing_record.sync_error_message = f"ERP connection error during authentication: {str(e)}"
+                weighing_record.save()
             return False
         except requests.exceptions.Timeout as e:
             print(f"Timeout error during ERP authentication: {str(e)}")
-            # Update weighing record with timeout error
-            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-            weighing_record.is_synced = False
-            weighing_record.last_sync_attempt = timezone.now()
-            weighing_record.sync_error_message = f"ERP timeout error during authentication: {str(e)}"
-            weighing_record.save()
+            # Update weighing record with timeout error if weighing_record_id is provided
+            if weighing_record_id:
+                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                weighing_record.is_synced = False
+                weighing_record.last_sync_attempt = timezone.now()
+                weighing_record.sync_error_message = f"ERP timeout error during authentication: {str(e)}"
+                weighing_record.save()
             return False
         except ValueError as e:  # JSON decode error
             print(f"Error parsing authentication response: {str(e)}")
-            # Update weighing record with parsing error
-            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-            weighing_record.is_synced = False
-            weighing_record.last_sync_attempt = timezone.now()
-            weighing_record.sync_error_message = f"Error parsing ERP authentication response: {str(e)}"
-            weighing_record.save()
+            # Update weighing record with parsing error if weighing_record_id is provided
+            if weighing_record_id:
+                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                weighing_record.is_synced = False
+                weighing_record.last_sync_attempt = timezone.now()
+                weighing_record.sync_error_message = f"Error parsing ERP authentication response: {str(e)}"
+                weighing_record.save()
             return False
         except Exception as e:
             print(f"Error during ERP authentication: {str(e)}")
-            # Update weighing record with general error
-            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-            weighing_record.is_synced = False
-            weighing_record.last_sync_attempt = timezone.now()
-            weighing_record.sync_error_message = f"Error during ERP authentication: {str(e)}"
-            weighing_record.save()
+            # Update weighing record with general error if weighing_record_id is provided
+            if weighing_record_id:
+                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                weighing_record.is_synced = False
+                weighing_record.last_sync_attempt = timezone.now()
+                weighing_record.sync_error_message = f"Error during ERP authentication: {str(e)}"
+                weighing_record.save()
             return False
     
     
@@ -899,13 +949,13 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
         # If allow_bale_insert is enabled, call create-commercial-bale endpoint
         if allow_bale_insert_enabled:
             try:
-                # Get the weighing record
-                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                
-                # Get delivery note number if available
+                # Get the weighing record if weighing_record_id is provided
+                weighing_record = None
                 delivery_note_number = ''
-                if weighing_record.delivery_note:
-                    delivery_note_number = weighing_record.delivery_note.delivery_note_number
+                if weighing_record_id:
+                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    if weighing_record.delivery_note:
+                        delivery_note_number = weighing_record.delivery_note.delivery_note_number
                 
                 # Get group, lot, and hessian numbers from custom data if they exist
                 group_number = custom_data.get('group_number', '') if custom_data else ''
@@ -942,57 +992,66 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 print(f"create-commercial-bale response text: {response.text}")
                 
                 if response.status_code in [200, 201]:  # 201 Created is also successful
-                    # Update weighing record with erp response
-                    weighing_record.is_synced = True
-                    weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.save()
+                    # Update weighing record with erp response if weighing_record exists
+                    if weighing_record:
+                        weighing_record.is_synced = True
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.save()
                     return True
                 elif response.status_code >= 400:
                     # Handle client/server error responses
-                    weighing_record.is_synced = False
-                    weighing_record.last_sync_attempt = timezone.now()
-                    error_message = response.text
-                    # Try to extract a more user-friendly error message if available
-                    try:
-                        response_json = response.json()
-                        if 'error' in response_json and 'data' in response_json['error']:
-                            error_message = response_json['error']['data'].get('message', response.text)
-                    except:
-                        pass  # If we can't parse the JSON, use the raw response text
-                    weighing_record.sync_error_message = f"create-commercial-bale failed with status {response.status_code}: {error_message}"
-                    weighing_record.save()
+                    if weighing_record:
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        error_message = response.text
+                        # Try to extract a more user-friendly error message if available
+                        try:
+                            response_json = response.json()
+                            if 'error' in response_json and 'data' in response_json['error']:
+                                error_message = response_json['error']['data'].get('message', response.text)
+                        except:
+                            pass  # If we can't parse the JSON, use the raw response text
+                        weighing_record.sync_error_message = f"create-commercial-bale failed with status {response.status_code}: {error_message}"
+                        weighing_record.save()
                     return False
                 else:
                     # Other status codes that aren't 200/201 but not 400+ errors
-                    weighing_record.is_synced = False
-                    weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.sync_error_message = f"create-commercial-bale returned unexpected status {response.status_code}: {response.text}"
-                    weighing_record.save()
+                    if weighing_record:
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"create-commercial-bale returned unexpected status {response.status_code}: {response.text}"
+                        weighing_record.save()
                     return False
                     
             except requests.exceptions.ConnectionError as e:
                 print(f"Connection error calling create-commercial-bale: {str(e)}")
-                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                weighing_record.is_synced = False
-                weighing_record.last_sync_attempt = timezone.now()
-                weighing_record.sync_error_message = f"Connection error calling create-commercial-bale: {str(e)}"
-                weighing_record.save()
+                if weighing_record_id:
+                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    if weighing_record:
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"Connection error calling create-commercial-bale: {str(e)}"
+                        weighing_record.save()
                 return False
             except requests.exceptions.Timeout as e:
                 print(f"Timeout error calling create-commercial-bale: {str(e)}")
-                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                weighing_record.is_synced = False
-                weighing_record.last_sync_attempt = timezone.now()
-                weighing_record.sync_error_message = f"Timeout error calling create-commercial-bale: {str(e)}"
-                weighing_record.save()
+                if weighing_record_id:
+                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    if weighing_record:
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"Timeout error calling create-commercial-bale: {str(e)}"
+                        weighing_record.save()
                 return False
             except Exception as e:
                 print(f"Error calling create-commercial-bale: {str(e)}")
-                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                weighing_record.is_synced = False
-                weighing_record.last_sync_attempt = timezone.now()
-                weighing_record.sync_error_message = f"Error calling create-commercial-bale: {str(e)}"
-                weighing_record.save()
+                if weighing_record_id:
+                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    if weighing_record:
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"Error calling create-commercial-bale: {str(e)}"
+                        weighing_record.save()
                 return False
         else:
             # Use existing logic for other cases
@@ -1027,68 +1086,75 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     print(response.text)
                     
                     if response.status_code in [200, 201]:  # 201 Created is also successful
-                        # Update weighing record with erp response
-                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                        weighing_record.is_synced = True
-                        weighing_record.last_sync_attempt = timezone.now()
-                        weighing_record.save()
+                        # Update weighing record with erp response if weighing_record_id exists
+                        if weighing_record_id:
+                            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                            weighing_record.is_synced = True
+                            weighing_record.last_sync_attempt = timezone.now()
+                            weighing_record.save()
                         return True
                     elif response.status_code >= 400:
                         # Handle client/server error responses
-                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                        weighing_record.is_synced = False
-                        weighing_record.last_sync_attempt = timezone.now()
-                        error_message = response.text
-                        # Try to extract a more user-friendly error message if available
-                        try:
-                            response_json = response.json()
-                            if 'error' in response_json and 'data' in response_json['error']:
-                                error_message = response_json['error']['data'].get('message', response.text)
-                        except:
-                            pass  # If we can't parse the JSON, use the raw response text
-                        weighing_record.sync_error_message = f"ERP API call failed with status {response.status_code}: {error_message}"
-                        weighing_record.save()
+                        if weighing_record_id:
+                            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                            weighing_record.is_synced = False
+                            weighing_record.last_sync_attempt = timezone.now()
+                            error_message = response.text
+                            # Try to extract a more user-friendly error message if available
+                            try:
+                                response_json = response.json()
+                                if 'error' in response_json and 'data' in response_json['error']:
+                                    error_message = response_json['error']['data'].get('message', response.text)
+                            except:
+                                pass  # If we can't parse the JSON, use the raw response text
+                            weighing_record.sync_error_message = f"ERP API call failed with status {response.status_code}: {error_message}"
+                            weighing_record.save()
                         return False
                     else:
                         # Other status codes that aren't 200/201 but not 400+ errors
-                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                        weighing_record.is_synced = False
-                        weighing_record.last_sync_attempt = timezone.now()
-                        weighing_record.sync_error_message = f"ERP API call returned unexpected status {response.status_code}: {response.text}"
-                        weighing_record.save()
+                        if weighing_record_id:
+                            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                            weighing_record.is_synced = False
+                            weighing_record.last_sync_attempt = timezone.now()
+                            weighing_record.sync_error_message = f"ERP API call returned unexpected status {response.status_code}: {response.text}"
+                            weighing_record.save()
                         return False
                 except requests.exceptions.ConnectionError as e:
                     print(f"Connection error during ERP API call: {str(e)}")
-                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                    weighing_record.is_synced = False
-                    weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.sync_error_message = f"Connection error during ERP API call: {str(e)}"
-                    weighing_record.save()
+                    if weighing_record_id:
+                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"Connection error during ERP API call: {str(e)}"
+                        weighing_record.save()
                     return False
                 except requests.exceptions.Timeout as e:
                     print(f"Timeout error during ERP API call: {str(e)}")
-                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                    weighing_record.is_synced = False
-                    weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.sync_error_message = f"Timeout error during ERP API call: {str(e)}"
-                    weighing_record.save()
+                    if weighing_record_id:
+                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = f"Timeout error during ERP API call: {str(e)}"
+                        weighing_record.save()
                     return False
                 except Exception as e:
                     print(f"Error sending to erp: {str(e)}")
-                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                    weighing_record.is_synced = False
-                    weighing_record.last_sync_attempt = timezone.now()
-                    weighing_record.sync_error_message = str(e)
-                    weighing_record.save()
+                    if weighing_record_id:
+                        weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                        weighing_record.is_synced = False
+                        weighing_record.last_sync_attempt = timezone.now()
+                        weighing_record.sync_error_message = str(e)
+                        weighing_record.save()
                     return False
             else:
                 print('No session id found')
-                # Update weighing record with session error
-                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                weighing_record.is_synced = False
-                weighing_record.last_sync_attempt = timezone.now()
-                weighing_record.sync_error_message = "No valid session ID available for ERP communication"
-                weighing_record.save()
+                # Update weighing record with session error if weighing_record_id is provided
+                if weighing_record_id:
+                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                    weighing_record.is_synced = False
+                    weighing_record.last_sync_attempt = timezone.now()
+                    weighing_record.sync_error_message = "No valid session ID available for ERP communication"
+                    weighing_record.save()
                 return False
     else:
         # TODO: Add other erp systems here
