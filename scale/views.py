@@ -1094,6 +1094,83 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
         # TODO: Add other erp systems here
         print('ONLY ODOO IS SUPPORTED FOR NOW')
         return False
+
+def get_current_weight_api(request, scale_id):
+    try:
+        try:
+            scale = Scale.objects.get(scale_id=str(scale_id))
+        except Scale.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': f'Scale not found with scale_id: {scale_id}'
+            }, status=404)
+        
+        if not scale.com_port:
+            return JsonResponse({
+                'success': False,
+                'message': f'Scale {scale.name} does not have a COM port configured'
+            }, status=400)
+        
+        ser = None
+        try:
+            ser = serial.Serial(scale.com_port, 9600, timeout=2)
+            if ser.is_open:
+                # Clear any stale data from buffer
+                for _ in range(3):
+                    ser.reset_input_buffer()
+                    time.sleep(0.05)
+                # Send command to get weight
+                ser.write(b"\r\n")
+                # Read response
+                time.sleep(0.3)
+                line = ser.readline()
+                # Decode bytes
+                try:
+                    decoded = line.decode('utf-8', errors='ignore').strip()
+                except Exception:
+                    decoded = line.decode(errors='ignore').strip()
+
+                # Attempt to parse numeric weight from decoded string
+                numeric_match = re.search(r'([-+]?\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', decoded, re.IGNORECASE)
+
+                if numeric_match:
+                    num_str = numeric_match.group(1).replace(',', '')
+                    unit = numeric_match.group(2).lower()
+                    try:
+                        weight = float(num_str)
+                        return JsonResponse({
+                            'success': True,
+                            'weight': weight,
+                            'unit': unit,
+                            'scale_id': str(scale.scale_id) if scale.scale_id else None,
+                            'scale_name': scale.name
+                        })
+                    except ValueError:
+                        return JsonResponse({
+                            'success': False,
+                            'message': f'Could not parse numeric weight: {num_str}'
+                        })
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'No numeric weight found in: {decoded}'
+                    })
+                    
+        except serial.SerialException as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'Error reading from scale: {str(e)}'
+            })
+        finally:
+            if ser and ser.is_open:
+                ser.close()
+                
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': str(e)
+        })
+    
     
 
 @login_required
