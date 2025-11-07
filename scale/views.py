@@ -771,6 +771,9 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
     
     # Get company settings
     company_settings = CompanySettings.objects.first()
+    
+    # Get API key from company settings
+    api_key = company_settings.api_key if company_settings and company_settings.api_key else None
     # print('Company Settings: ', company_settings)
     # print('Company Settings ERP System: ', company_settings.erp_system.name)
     # print('Password: ', company_settings.erp_password)
@@ -816,8 +819,8 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 }
             }
             headers = {
-                "Content-Type": "application/json",
-                "User-Agent": "insomnia/11.0.2"
+                "User-Agent": "insomnia/11.5.0",
+                "X-API-Key": api_key
             }
 
             # If we have an existing session_id, use it
@@ -984,7 +987,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 # Make the API call
                 headers = {
                     "User-Agent": "insomnia/11.5.0",
-                    "X-API-Key": "9999888811110000"
+                    "X-API-Key": api_key
                 }
                 response = requests.request("POST", url, data=payload, headers=headers, params=params)
                 
@@ -1078,7 +1081,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     payload = {}
                     headers = {
                         "User-Agent": "insomnia/11.5.0",
-                        "X-API-Key": "9999888811110000"
+                        "X-API-Key": api_key
                     }
                     response = requests.request("POST", url, json=payload, headers=headers)
                     
@@ -1161,6 +1164,8 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
         print('ONLY ODOO IS SUPPORTED FOR NOW')
         return False
 
+@csrf_exempt
+@login_required
 def get_current_weight_api(request, scale_id):
     try:
         try:
@@ -1543,6 +1548,9 @@ def recall_bale(request, pk):
                     'message': 'Company API settings not configured.'
                 })
             
+            # Get API key from company settings
+            api_key = company_settings.api_key if company_settings and company_settings.api_key else None
+            
             # Try to get session ID from cookies or attempt authentication if needed
             session_id = request.COOKIES.get('session_id')
             
@@ -1559,7 +1567,7 @@ def recall_bale(request, pk):
                 }
                 auth_headers = {
                     "User-Agent": "insomnia/11.5.0",
-                    "X-API-Key": "9999888811110000"
+                    "X-API-Key": api_key
                 }
                 
                 print("Making authentication request to:", auth_url)
@@ -1614,7 +1622,7 @@ def recall_bale(request, pk):
             
             headers = {
                 "User-Agent": "insomnia/11.5.0",
-                "X-API-Key": "9999888811110000"
+                "X-API-Key": api_key
             }
             
             response = requests.post(api_url, headers=headers, timeout=10)
@@ -2641,6 +2649,9 @@ def recall_and_update_bale(request):
         if not company_settings or not company_settings.api_url:
             return JsonResponse({'success': False, 'message': 'ERP settings not configured.'})
 
+        # Get API key from company settings
+        api_key = company_settings.api_key if company_settings and company_settings.api_key else None
+
         # Get the existing weighing record to retrieve hessian value
         weighing_record = WeighingRecord.objects.filter(
             delivery_note=delivery_note,
@@ -2675,7 +2686,7 @@ def recall_and_update_bale(request):
         print(f"Recall and Update: Making API request to: {api_url}")
         headers = {
             "User-Agent": "insomnia/11.5.0",
-            "X-API-Key": "9999888811110000"
+            "X-API-Key": api_key
         }
         response = requests.post(api_url, headers=headers, timeout=10)
         print(f"Recall and Update: ERP response status: {response.status_code}")
