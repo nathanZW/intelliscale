@@ -307,9 +307,9 @@
         </div>
 
         <!-- Right column - Other cards (50%) -->
-        <div class="col-span-1 space-y-6">
+        <div class="col-span-1">
 
-            <div id="active-delivery-note-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 {% if not active_delivery_note %}hidden{% endif %}">
+            <div id="active-delivery-note-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 mb-6 {% if not active_delivery_note %}hidden{% endif %}">
                 <div class="px-6 py-5 border-b border-zinc-200 bg-green-50">
                     <div class="flex justify-between w-full items-center">
                         <h2 class="text-md font-medium text-zinc-900">ACTIVE DNOTE</h2>
@@ -417,7 +417,7 @@
                 <input type="hidden" id="active-delivery-note-id" value="{% if active_delivery_note %}{{ active_delivery_note.id }}{% endif %}">
             </div>
 
-            <div id="delivery-note-selection-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 hidden">
+            <div id="delivery-note-selection-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 mb-6 hidden">
                 <div class="px-6 py-5 border-b border-zinc-200">
                     <h2 class="text-lg font-medium text-zinc-900">DELIVERY NOTE {% if processes.0.process_type == 'WeighBridge' %}<span class="text-red-500 text-sm">(Required)</span>{% endif %}</h2>
                 </div>
@@ -443,7 +443,7 @@
             </div>
 
             <!-- Search Delivery Note Card (for ctl_commercial_workflow) -->
-            <div id="search-delivery-note-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 hidden">
+            <div id="search-delivery-note-card" class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 mb-6 hidden">
                 <div class="px-6 py-5 border-b border-zinc-200">
                     <h2 class="text-lg font-medium text-zinc-900">Search Delivery Note</h2>
                 </div>
@@ -465,7 +465,7 @@
 
             
             <!-- Notes Card (Moved from DATA section) -->
-            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 mb-6">
                 <div class="px-6 py-5 border-b border-zinc-200">
                     <h2 class="text-lg font-medium text-zinc-900">NOTES</h2>
                 </div>
