@@ -325,33 +325,6 @@
                     </div>
                 </div>
                 <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <dt class="text-sm font-medium text-zinc-500">Delivery Note Number</dt>
-                            <dd class="mt-1 text-sm text-zinc-900 font-semibold" id="active-dnote-number">{% if active_delivery_note %}{{ active_delivery_note.delivery_note_number }}{% else %}-{% endif %}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-sm font-medium text-zinc-500">Selling Point</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-selling-point">{% if active_delivery_note %}{{ active_delivery_note.get_selling_point_name }}{% else %}-{% endif %}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-sm font-medium text-zinc-500">Grower Number</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-grower-number">{% if active_delivery_note %}{{ active_delivery_note.get_grower_number }}{% else %}-{% endif %}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-sm font-medium text-zinc-500">Preferred Sale Date</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-sale-date">{% if active_delivery_note %}{{ active_delivery_note.get_preferred_sale_date }}{% else %}-{% endif %}</dd>
-                        </div>
-                        <div class="hidden">
-                            <dt class="text-sm font-medium text-zinc-500">Grower</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-grower-name">{% if active_delivery_note %}{{ active_delivery_note.get_grower_name }}{% else %}-{% endif %}</dd>
-                        </div>
-                        <div class="hidden">
-                            <dt class="text-sm font-medium text-zinc-500">Location</dt>
-                            <dd class="mt-1 text-sm text-zinc-900" id="active-location">{% if active_delivery_note %}{{ active_delivery_note.get_location_name }}{% else %}-{% endif %}</dd>
-                        </div>
-                    </div>
-                    
                     <!-- Progress Bar -->
                     <div class="mt-4" id="progress-section">
                         <div class="flex justify-between text-sm text-zinc-700 mb-1">
@@ -378,30 +351,57 @@
                     
                     <!-- Scanned Barcodes List -->
                     <div class="mt-4" {% if not active_delivery_note or not active_delivery_note.scanned_records_data %}style="display: none;"{% endif %}>
-                        <h4 class="text-sm font-medium text-zinc-700 mb-2">Scanned Barcodes ({% if active_delivery_note %}{{ active_delivery_note.scanned_records_data|length }}{% else %}0{% endif %})</h4>
+                        <h4 class="text-lg font-medium text-zinc-700 mb-2">Scanned Barcodes ({% if active_delivery_note %}{{ active_delivery_note.scanned_records_data|length }}{% else %}0{% endif %})</h4>
                         <div class="max-h-64 overflow-y-auto bg-zinc-50 rounded-md p-2" id="scanned-barcodes-list">
                             {% if active_delivery_note %}
                                 <table class="min-w-full divide-y divide-zinc-200">
                                     <thead class="bg-zinc-100">
                                         <tr>
-                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Barcode</th>
-                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Group</th>
-                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Lot</th>
-                                            <th class="px-2 py-2 text-sm font-medium text-zinc-500">Weight</th>
+                                            <th class="px-2 py-2 text-lg font-medium text-zinc-500">Barcode</th>
+                                            <th class="px-2 py-2 text-lg font-medium text-zinc-500">Group</th>
+                                            <th class="px-2 py-2 text-lg font-medium text-zinc-500">Lot</th>
+                                            <th class="px-2 py-2 text-lg font-medium text-zinc-500">Weight</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-zinc-200">
                                         {% for record in active_delivery_note.scanned_records_data %}
                                         <tr class="bg-white even:bg-zinc-50">
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.barcode }}</td>
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.group_number|default:"" }}</td>
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.lot_number|default:"" }}</td>
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.weight_display }}</td>
+                                            <td class="px-2 py-2 text-lg text-zinc-900">{{ record.barcode }}</td>
+                                            <td class="px-2 py-2 text-lg text-zinc-900">{{ record.group_number|default:"" }}</td>
+                                            <td class="px-2 py-2 text-lg text-zinc-900">{{ record.lot_number|default:"" }}</td>
+                                            <td class="px-2 py-2 text-lg text-zinc-900">{{ record.weight_display }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500">Delivery Note Number</dt>
+                            <dd class="mt-1 text-sm text-zinc-900 font-semibold" id="active-dnote-number">{% if active_delivery_note %}{{ active_delivery_note.delivery_note_number }}{% else %}-{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500">Selling Point</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-selling-point">{% if active_delivery_note %}{{ active_delivery_note.get_selling_point_name }}{% else %}-{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500">Grower Number</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-grower-number">{% if active_delivery_note %}{{ active_delivery_note.get_grower_number }}{% else %}-{% endif %}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-zinc-500">Preferred Sale Date</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-sale-date">{% if active_delivery_note %}{{ active_delivery_note.get_preferred_sale_date }}{% else %}-{% endif %}</dd>
+                        </div>
+                        <div class="hidden">
+                            <dt class="text-sm font-medium text-zinc-500">Grower</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-grower-name">{% if active_delivery_note %}{{ active_delivery_note.get_grower_name }}{% else %}-{% endif %}</dd>
+                        </div>
+                        <div class="hidden">
+                            <dt class="text-sm font-medium text-zinc-500">Location</dt>
+                            <dd class="mt-1 text-sm text-zinc-900" id="active-location">{% if active_delivery_note %}{{ active_delivery_note.get_location_name }}{% else %}-{% endif %}</dd>
                         </div>
                     </div>
                     
@@ -1422,6 +1422,8 @@
 
         function getWeightFromScale(callback) {
             console.log('getWeightFromScale... (TESTING)');
+            // callback(45);
+            // return;
             const scaleId = $('#scale-select').val();
             
             if (!scaleId) {
