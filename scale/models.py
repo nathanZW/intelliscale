@@ -421,6 +421,8 @@ class CompanySettings(models.Model):
     
     def __str__(self):
         return f"{self.company_name} - {self.erp_system}"
+
+
     
     
 

@@ -294,6 +294,15 @@ class DeliveryNoteForm(forms.ModelForm):
     
 class CompanySettingsForm(forms.ModelForm):
 
+    # Make the password field optional so it doesn't need to be filled every time
+    erp_password = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            'class': 'block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
+        }),
+        required=False,  # Not required for updates
+        help_text="Leave blank to keep the current password"
+    )
+
     class Meta:
         model = CompanySettings
         fields = [
@@ -319,9 +328,6 @@ class CompanySettingsForm(forms.ModelForm):
             'erp_username': forms.TextInput(attrs={
                 'class': 'block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
             }),
-            'erp_password': forms.PasswordInput(attrs={
-                'class': 'block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
-            }),
             'api_url': forms.TextInput(attrs={
                 'class': 'block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
             }),
@@ -332,6 +338,24 @@ class CompanySettingsForm(forms.ModelForm):
                 'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
             }),
         }
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # Only update the password if a new one is provided and not empty
+        password_data = self.cleaned_data.get('erp_password')
+        if password_data:  # If a new password is provided in the form
+            # Update with the new password
+            instance.erp_password = password_data
+        else:
+            # If no password was provided in the form, preserve the existing password
+            if instance.pk:  # If updating an existing instance
+                original = CompanySettings.objects.get(pk=instance.pk)
+                instance.erp_password = original.erp_password
+        
+        if commit:
+            instance.save()
+        return instance
 
 
 class DriverForm(forms.ModelForm):
