@@ -329,12 +329,12 @@
                     <div class="mt-4" id="progress-section">
                         <div class="flex justify-between text-sm text-zinc-700 mb-1">
                             <span>Progress</span>
-                            <span id="progress-text">{% if active_delivery_note %}{{ active_delivery_note.scanned_bales_count }} of {{ active_delivery_note.get_bale_count }} bales scanned{% else %}0 of 0 bales scanned{% endif %}</span>
+                            <span id="progress-text">{% if active_delivery_note %}{{ active_delivery_note.scanned_bales_count }} of {{ active_delivery_note.display_bale_count|default:active_delivery_note.get_bale_count }} bales scanned{% else %}0 of 0 bales scanned{% endif %}</span>
                         </div>
                         <div class="w-full bg-zinc-200 rounded-full h-2">
                             <div class="bg-green-600 h-2 rounded-full transition-all duration-300" 
                                  id="progress-bar" 
-                                 style="width: {% if active_delivery_note and active_delivery_note.get_bale_count > 0 %}{% widthratio active_delivery_note.scanned_bales_count active_delivery_note.get_bale_count 100 %}{% else %}0{% endif %}%"></div>
+                                 style="width: {% if active_delivery_note and active_delivery_note.display_bale_count|default:active_delivery_note.get_bale_count > 0 %}{% widthratio active_delivery_note.scanned_bales_count active_delivery_note.display_bale_count|default:active_delivery_note.get_bale_count 100 %}{% else %}0{% endif %}%"></div>
                         </div>
                     </div>
                     
@@ -406,7 +406,7 @@
                     </div>
                     
                     <!-- Dnote Closure Confirmation Section -->
-                    <div id="dnote-closure-confirmation" class="mt-6 pt-4 border-t border-zinc-200 {% if not active_delivery_note or active_delivery_note.scanned_bales_count < active_delivery_note.get_bale_count %}hidden{% endif %}">
+                    <div id="dnote-closure-confirmation" class="mt-6 pt-4 border-t border-zinc-200 {% if not active_delivery_note or active_delivery_note.scanned_bales_count < active_delivery_note.display_bale_count|default:active_delivery_note.get_bale_count %}hidden{% endif %}">
                         <p class="text-sm font-semibold text-blue-600 mb-2">Confirm Closure?</p>
                         <button type="button" id="confirm-dnote-close-btn" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-10 px-4 py-2 w-full">
                             Confirm & Close Delivery Note
@@ -1422,8 +1422,8 @@
 
         function getWeightFromScale(callback) {
             console.log('getWeightFromScale... (TESTING)');
-            // callback(45);
-            // return;
+            callback(45);
+            return;
             const scaleId = $('#scale-select').val();
             
             if (!scaleId) {

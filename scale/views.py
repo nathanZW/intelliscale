@@ -725,6 +725,19 @@ def weighing_station(request):
     
     if active_delivery_note:
         active_delivery_note.scanned_records_data = active_delivery_note.get_scanned_records_data()
+        
+        # Determine the appropriate bale count to display based on the active process
+        # If there are processes and the first one allows bale insert, use delivered bale count
+        active_process = processes.first() if processes.exists() else None
+        if active_process and active_process.allow_bale_insert:
+            # When bale insert is allowed, use the delivered bale count instead of the original total
+            active_delivery_note.display_bale_count = active_delivery_note.get_bale_count_delivered()
+        else:
+            # Otherwise, use the standard bale count
+            active_delivery_note.display_bale_count = active_delivery_note.get_bale_count()
+    else:
+        # Set a default value when there's no active delivery note
+        active_delivery_note = None
     
     # Create a dictionary of product tare weights for the template
     product_tare_weights = {}
