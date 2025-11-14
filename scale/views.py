@@ -20,6 +20,9 @@ import socket
 from datetime import datetime
 import re
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Scale Management Views
 @login_required
@@ -1201,7 +1204,6 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
         return False
 
 @csrf_exempt
-@login_required
 def get_current_weight_api(request, scale_id):
     try:
         try:
@@ -1471,24 +1473,119 @@ def close_delivery_note(request, pk):
     """Explicitly close a delivery note after user confirmation."""
     if request.method == 'POST':
         delivery_note = get_object_or_404(DeliveryNote, pk=pk)
-        
+
         # Only close if it's currently being scanned (i.e., ready for closure)
         if delivery_note.is_being_scanned:
+            # Check if the delivery note is actually scanning complete before updating Odoo status
+            if not delivery_note.is_scanning_complete():
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Delivery note {delivery_note.delivery_note_number} is not fully scanned. Cannot update Odoo status to laid.'
+                })
+
+            # First, update the status in Odoo to 'laid'
+            success = update_dnote_completion_status_with_api_key(delivery_note)
+            if not success:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Failed to update Odoo status for delivery note {delivery_note.delivery_note_number}. Delivery note was not closed locally.'
+                })
+
+            # Update local status
             delivery_note.is_being_scanned = False
             delivery_note.status = 'Closed' # Assuming 'Closed' is a valid status
             delivery_note.save()
-            
+
             return JsonResponse({
                 'success': True,
-                'message': f'Delivery note {delivery_note.delivery_note_number} has been successfully closed.'
+                'message': f'Delivery note {delivery_note.delivery_note_number} has been successfully closed and status updated in Odoo.'
             })
         else:
             return JsonResponse({
                 'success': False,
                 'message': f'Delivery note {delivery_note.delivery_note_number} is not in a state to be closed.'
             })
-    
+
     return JsonResponse({'success': False, 'message': 'Invalid request method.'})
+
+
+def update_dnote_completion_status_with_api_key(delivery_note):
+    """Send a request to Odoo to update the delivery note status to laid, using API key"""
+    try:
+        # Get company settings for API URL and API key
+        company_settings = CompanySettings.objects.first()
+        if not company_settings or not company_settings.api_url:
+            logger.error("No company settings found or API URL not configured")
+            return False
+
+        # Get API key from company settings
+        api_key = company_settings.api_key if company_settings and company_settings.api_key else None
+        if not api_key:
+            logger.error("API key not configured in company settings")
+            return False
+
+        url = f"{company_settings.api_url}/api/grower-delivery-notes/update-status"
+
+        querystring = {
+            "document_number": delivery_note.delivery_note_number,
+            "status": "laid"
+        }
+
+        payload = ""
+
+        headers = {
+            "User-Agent": "insomnia/11.5.0",
+            "X-API-Key": api_key
+        }
+
+        response = requests.request("POST", url, data=payload, headers=headers, params=querystring)
+
+        if response.status_code in [200, 201]:
+            # Check if the response body contains success=false
+            try:
+                response_json = response.json()
+                if isinstance(response_json, dict) and response_json.get('success') is False:
+                    # The API returned 200 but with success=false in the body
+                    error_message = response_json.get('message', response.text)
+                    logger.error(f"Odoo API returned success=false for delivery note {delivery_note.delivery_note_number}. Error: {error_message}")
+                    return False
+                else:
+                    # API call was successful (success is True or not present)
+                    logger.info(f"Successfully updated Odoo status to 'laid' for delivery note {delivery_note.delivery_note_number}")
+                    return True
+            except ValueError:  # JSON decode error
+                # If response is not JSON, assume success for 200/201 status
+                logger.info(f"Successfully updated Odoo status to 'laid' for delivery note {delivery_note.delivery_note_number} (non-JSON response)")
+                return True
+        elif response.status_code >= 400:
+            # Handle client/server error responses
+            error_message = response.text
+            # Try to extract a more user-friendly error message if available
+            try:
+                response_json = response.json()
+                if 'error' in response_json and 'data' in response_json['error']:
+                    error_message = response_json['error']['data'].get('message', response.text)
+            except:
+                pass  # If we can't parse the JSON, use the raw response text
+            logger.error(f"Failed to update Odoo status. Status: {response.status_code}. Error: {error_message}")
+            return False
+        else:
+            # Other status codes that aren't 200/201 but not 400+ errors
+            logger.error(f"Unexpected response from Odoo. Status: {response.status_code}. Response: {response.text}")
+            return False
+
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Connection error when updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        return False
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Timeout error when updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error when updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        return False
 
 
 @user_passes_test(is_admin)

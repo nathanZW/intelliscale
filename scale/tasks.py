@@ -169,19 +169,25 @@ def update_dnote_completion_status(delivery_note):
         if not company_settings or not company_settings.api_url:
             logger.error("No company settings found or API URL not configured")
             return False
-        
+
+        # Get API key from company settings
+        api_key = company_settings.api_key if company_settings and company_settings.api_key else None
+        if not api_key:
+            logger.error("API key not configured in company settings")
+            return False
+
         url = f"{company_settings.api_url}/api/grower-delivery-notes/update-status"
-        
+
         querystring = {
             "document_number": delivery_note.delivery_note_number,
             "status": "laid"
         }
-        
+
         payload = ""
-        
+
         headers = {
-            "cookie": "frontend_lang=en_GB",
-            "User-Agent": "insomnia/11.5.0"
+            "User-Agent": "insomnia/11.5.0",
+            "X-API-Key": api_key
         }
         
         response = requests.request("POST", url, data=payload, headers=headers, params=querystring)
