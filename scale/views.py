@@ -22,6 +22,8 @@ import re
 import time
 import logging
 
+from .tasks import sync_odoo_delivery_notes
+
 logger = logging.getLogger(__name__)
 
 # Scale Management Views
@@ -1466,6 +1468,41 @@ def delivery_note_suspend(request, pk):
             })
     
     return JsonResponse({'success': False, 'message': 'Invalid request method.'})
+
+@login_required
+@user_passes_test(is_admin)
+def manual_sync_delivery_notes(request):
+    """Manually trigger Odoo delivery note sync"""
+    from django.core.cache import cache
+
+    if request.method == 'POST':
+        try:
+            # Check if another sync is already running by checking the same lock
+            lock_id = "sync_odoo_delivery_notes_lock"
+            if cache.get(lock_id):
+                # Another sync is already running
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Another sync is currently running, please wait for it to complete.'
+                })
+
+            # Call the sync task asynchronously
+            task_result = sync_odoo_delivery_notes.delay()
+
+            # Return success response
+            return JsonResponse({
+                'success': True,
+                'message': 'Delivery note sync initiated successfully.',
+                'task_id': str(task_result.id)  # Include task ID for potential tracking
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'Error initiating sync: {str(e)}'
+            })
+
+    return JsonResponse({'success': False, 'message': 'Invalid request method.'})
+
 
 @login_required
 @user_passes_test(is_admin)

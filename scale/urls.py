@@ -57,6 +57,7 @@ urlpatterns = [
     path('delivery-notes/find-by-barcode/', views.find_delivery_note_by_barcode, name='find_delivery_note_by_barcode'),
     path('delivery-notes/search/', views.search_delivery_notes, name='search_delivery_notes'),
     path('delivery-notes/<int:pk>/activate/', views.activate_delivery_note, name='activate_delivery_note'),
+    path('delivery-notes/sync/', views.manual_sync_delivery_notes, name='manual_sync_delivery_notes'),
     
     # Weighing Station URLs
     path('weighing-station/', views.weighing_station, name='weighing_station'),

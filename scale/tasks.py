@@ -10,59 +10,77 @@ logger = logging.getLogger(__name__)
 @shared_task
 def sync_odoo_delivery_notes():
     """Fetch all delivery notes from Odoo and sync with Django"""
-    try:
-        # Get company settings for API URL
-        company_settings = CompanySettings.objects.first()
-        if not company_settings or not company_settings.api_url:
-            logger.error("No company settings found or API URL not configured")
-            return "Error: API URL not configured"
-        
-        # Fetch from Odoo API
-        response = requests.get(
-            f'{company_settings.api_url}/api/grower-delivery-notes',
-            params={'include_bales': 'true',
-                    'state': 'open,checked,laid'},
-            headers={
-                'User-Agent': 'insomnia/11.5.0',
-                # Add cookie authentication if needed
-                # 'Cookie': 'your-session-cookie-here'
-            },
-            timeout=30
-        )
-        
-        if response.status_code != 200:
-            error_message = (
-                f"Odoo API error: Status {response.status_code} for URL {response.url}. "
-                f"Response: {response.text}"
+    from django.core.cache import cache
+    import time
+
+    # Use a lock to prevent concurrent syncs
+    lock_id = "sync_odoo_delivery_notes_lock"
+    timeout = 60 * 5  # 5 minutes timeout
+
+    # Try to acquire the lock
+    if cache.add(lock_id, "true", timeout):
+        try:
+            logger.info("Acquired sync lock, starting sync task")
+            # Get company settings for API URL
+            company_settings = CompanySettings.objects.first()
+            if not company_settings or not company_settings.api_url:
+                logger.error("No company settings found or API URL not configured")
+                return "Error: API URL not configured"
+
+            # Fetch from Odoo API
+            response = requests.get(
+                f'{company_settings.api_url}/api/grower-delivery-notes',
+                params={'include_bales': 'true',
+                        'state': 'open,checked,laid'},
+                headers={
+                    'User-Agent': 'insomnia/11.5.0',
+                    # Add cookie authentication if needed
+                    # 'Cookie': 'your-session-cookie-here'
+                },
+                timeout=30
             )
-            logger.error(error_message)
-            return f"API Error: {response.status_code}"
-        
-        odoo_data = response.json()
-        
-        if not odoo_data.get('success'):
-            logger.error("Odoo API returned success=false")
-            return "API returned error"
-        
-        synced_count = 0
-        error_count = 0
-        
-        # Process each delivery note
-        for item in odoo_data['data']:
-            try:
-                sync_single_delivery_note(item)
-                synced_count += 1
-            except Exception as e:
-                logger.error(f"Error syncing record {item.get('id')}: {str(e)}")
-                error_count += 1
-        
-        result = f"Synced: {synced_count}, Errors: {error_count}"
-        logger.info(result)
-        return result
-        
-    except Exception as e:
-        logger.error(f"Sync task failed: {str(e)}")
-        return f"Task failed: {str(e)}"
+
+            if response.status_code != 200:
+                error_message = (
+                    f"Odoo API error: Status {response.status_code} for URL {response.url}. "
+                    f"Response: {response.text}"
+                )
+                logger.error(error_message)
+                return f"API Error: {response.status_code}"
+
+            odoo_data = response.json()
+
+            if not odoo_data.get('success'):
+                logger.error("Odoo API returned success=false")
+                return "API returned error"
+
+            synced_count = 0
+            error_count = 0
+
+            # Process each delivery note
+            for item in odoo_data['data']:
+                try:
+                    sync_single_delivery_note(item)
+                    synced_count += 1
+                except Exception as e:
+                    logger.error(f"Error syncing record {item.get('id')}: {str(e)}")
+                    error_count += 1
+
+            result = f"Synced: {synced_count}, Errors: {error_count}"
+            logger.info(result)
+            return result
+
+        except Exception as e:
+            logger.error(f"Sync task failed: {str(e)}")
+            return f"Task failed: {str(e)}"
+        finally:
+            # Release the lock
+            cache.delete(lock_id)
+            logger.info("Released sync lock")
+    else:
+        # Another sync is already running
+        logger.warning("Sync task attempted but another sync is already running")
+        return "Another sync is currently running, please wait for it to complete."
 
 def sync_single_delivery_note(odoo_record):
     """Sync a single delivery note record"""
