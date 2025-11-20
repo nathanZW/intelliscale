@@ -1106,25 +1106,32 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
             # print('Session ID: ', session_id)
             if session_id:
                 try:
-                    # Use different URL based on process type
+                    base_url = ""
+                    params = {}
                     if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
                         hessian_id = custom_data.get('hessian_id', '')
                         lot_number = custom_data.get('lot_number', '')
                         group_number = custom_data.get('group_number', '')
-                        url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass={float(net_weight):.2f}&scale_id={scale_id}&hessian_id={hessian_id}&lot_number={lot_number}&group_number={group_number}"
-                        print(f"CTL Workflow URL: {url}")
+                        
+                        base_url = f"{company_settings.api_url}/api/bales/update-mass/"
+                        params = {
+                            'barcode': barcode,
+                            'mass': f"{float(net_weight):.2f}",
+                            'scale_id': scale_id,
+                            'hessian_id': hessian_id,
+                            'lot_number': lot_number,
+                            'group_number': group_number
+                        }
                     else:
-                        url = company_settings.api_url + "/receiving/scaleserver/manual_scale/" + f"{float(net_weight):.2f}" + "/" + barcode
-                        print(f"Standard URL: {url}")
+                        base_url = f"{company_settings.api_url}/receiving/scaleserver/manual_scale/{float(net_weight):.2f}/{barcode}"
                     
-                    # print(f"Process type: {process_type}, Using URL: {url}")
-
-                    payload = {}
+                    payload = ""
                     headers = {
                         "User-Agent": "insomnia/11.5.0",
                         "X-API-Key": api_key
                     }
-                    response = requests.request("POST", url, json=payload, headers=headers)
+                    response = requests.request("POST", base_url, data=payload, params=params, headers=headers)
+                    print(f"Calling update-mass with params: {params}")
                     
                     print(response.status_code)
                     print(response.text)
