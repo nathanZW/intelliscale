@@ -573,7 +573,27 @@
         
         // Parse process marshalling allowance data from the template
         const processMarshalling = JSON.parse('{{ process_marshalling|escapejs }}');
-        
+
+        // Parse process allow spaces in barcode data from the template
+        const processAllowSpacesInBarcode = JSON.parse('{{ process_allow_spaces_in_barcode|escapejs }}');
+
+        // Global variable to track current process allow spaces setting
+        let currentProcessAllowsSpaces = false;
+
+        // Helper function to check if a process allows spaces in barcode
+        function checkAllowSpacesInBarcode(processId) {
+            return processId && processAllowSpacesInBarcode[processId] ? processAllowSpacesInBarcode[processId] : false;
+        }
+
+        // Helper function to get barcode value conditionally trimmed based on current process
+        function getBarcodeValue(input) {
+            if (currentProcessAllowsSpaces) {
+                return input; // Don't trim if spaces are allowed
+            } else {
+                return input.trim(); // Trim if spaces are not allowed
+            }
+        }
+
         // Now restore saved values after all elements and data are defined
         if (localStorage.getItem('lastScaleId')) {
             $('#scale-select').val(localStorage.getItem('lastScaleId'));
@@ -1633,7 +1653,7 @@
                 event.preventDefault();
                 return;
             }
-            const barcodeValue = document.getElementById('barcode-input').value.trim();
+            const barcodeValue = getBarcodeValue(document.getElementById('barcode-input').value);
             if (processType !== 'WeighBridge' && !barcodeValue) {
                 alert('Please enter or scan a barcode (required for this process type)');
                 document.getElementById('barcode-input').focus();
@@ -1810,8 +1830,8 @@
             if (e.key === 'Enter') {
                 e.preventDefault(); // Prevent any form submission
 
-                const barcodeValue = this.value.trim();
-                
+                const barcodeValue = getBarcodeValue(this.value);
+
                 if (!barcodeValue) {
                     console.log('Empty barcode, ignoring');
                     return;
@@ -1827,9 +1847,9 @@
         let scanTimeout;
         barcodeInput.addEventListener('input', function() {
             clearTimeout(scanTimeout);
-            
-            const barcodeValue = this.value.trim();
-            
+
+            const barcodeValue = getBarcodeValue(this.value);
+
             if (barcodeValue.length >= 8) { // Adjust this number based on your barcode format
                 scanTimeout = setTimeout(() => {
                     console.log('Barcode detected via auto-detection:', barcodeValue);
@@ -1864,7 +1884,8 @@
 
         // CTL Workflow specific handler
         function handleCtlWorkflowBarcode(barcode) {
-            if (!barcode.trim()) {
+            const processedBarcode = getBarcodeValue(barcode);
+            if (!processedBarcode) {
                 barcodeInput.dataset.processing = 'false';
                 return;
             }
@@ -1874,7 +1895,7 @@
             if (processId) {
                 const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
                 const allowBaleInsert = processAllowBaleInsert[processId] || false;
-                
+
                 // If allow_bale_insert is enabled, we still want to validate that the barcode
                 // doesn't already exist in another delivery note, but we allow proceeding
                 // even if it's not found (for new bale creation)
@@ -1886,26 +1907,26 @@
                             'Content-Type': 'application/x-www-form-urlencoded',
                             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                         },
-                        body: 'barcode=' + encodeURIComponent(barcode)
+                        body: 'barcode=' + encodeURIComponent(processedBarcode)
                     })
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
                             // Barcode exists in a delivery note - this is fine, proceed normally
                             const alreadyScanned = data.delivery_note.scanned_records_data.some(
-                                record => record.barcode === barcode
+                                record => record.barcode === processedBarcode
                             );
-                            
+
                             if (alreadyScanned) {
-                                showRecallModal(barcode, data.delivery_note);
+                                showRecallModal(processedBarcode, data.delivery_note);
                             } else {
                                 updateActiveDeliveryNoteDisplay(data.delivery_note);
-                                
+
                                 // If bale information is available, populate custom fields and make them readonly
                                 if (data.bale) {
                                     populateBaleCustomFields(data.bale);
                                 }
-                                
+
                                 showNotification(data.message, 'success');
                             }
                         } else {
@@ -1914,11 +1935,11 @@
                             if (processId) {
                                 const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
                                 const allowBaleInsert = processAllowBaleInsert[processId] || false;
-                                
+
                                 if (allowBaleInsert && data.message && data.message.includes('Barcode not found')) {
                                     // When allow_bale_insert is enabled, treat "not found" as acceptable
                                     // for creating new bales
-                                    console.log('Allowing new barcode for bale insert:', barcode);
+                                    console.log('Allowing new barcode for bale insert:', processedBarcode);
                                     showNotification('New barcode accepted for bale creation', 'success');
                                     // Don't clear the barcode input or focus - let the user proceed
                                 } else {
@@ -1942,7 +1963,7 @@
                         if (processId) {
                             const processAllowBaleInsert = JSON.parse('{{ process_allow_bale_insert|escapejs }}');
                             const allowBaleInsert = processAllowBaleInsert[processId] || false;
-                            
+
                             if (allowBaleInsert) {
                                 // Even on error, allow the barcode to proceed for allow_bale_insert
                                 showNotification('New barcode accepted for bale creation', 'success');
@@ -1968,25 +1989,25 @@
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                 },
-                body: 'barcode=' + encodeURIComponent(barcode)
+                body: 'barcode=' + encodeURIComponent(processedBarcode)
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     const alreadyScanned = data.delivery_note.scanned_records_data.some(
-                        record => record.barcode === barcode
+                        record => record.barcode === processedBarcode
                     );
-                    
+
                     if (alreadyScanned) {
-                        showRecallModal(barcode, data.delivery_note);
+                        showRecallModal(processedBarcode, data.delivery_note);
                     } else {
                         updateActiveDeliveryNoteDisplay(data.delivery_note);
-                        
+
                         // If bale information is available, populate custom fields and make them readonly
                         if (data.bale) {
                             populateBaleCustomFields(data.bale);
                         }
-                        
+
                         showNotification(data.message, 'success');
                     }
                 } else {
@@ -2126,14 +2147,18 @@
                             updateDeliveryNoteVisibility();
                             updateBarcodeRequirement();
                         }
-                        // Update custom fields based on new process
+
+                        // Update current process allow spaces in barcode setting
                         const processId = this.value;
+                        currentProcessAllowsSpaces = checkAllowSpacesInBarcode(processId);
+
+                        // Update custom fields based on new process
                         customFieldsContainer.classList.toggle('hidden', !processId);
                         if (processId) {
                             // Get custom fields for the selected process from our pre-loaded data
                             const customFields = processCustomFields[processId] || [];
                             renderCustomFields(customFields);
-                            
+
                             // Check if allow_bale_insert is enabled for this process
                             checkAllowBaleInsert(processId);
                         } else {
@@ -2155,6 +2180,17 @@
                 const initialProcessId = processSelect ? processSelect.value : null;
                 if (initialProcessId) {
                     checkAllowBaleInsert(initialProcessId);
+                }
+
+                // Initialize allow spaces in barcode setting based on current process
+                if (initialProcessId) {
+                    currentProcessAllowsSpaces = checkAllowSpacesInBarcode(initialProcessId);
+                } else {
+                    // Check for the hidden process input (when only one process exists)
+                    const hiddenProcessInput = document.getElementById('process-id-input');
+                    if (hiddenProcessInput && hiddenProcessInput.value) {
+                        currentProcessAllowsSpaces = checkAllowSpacesInBarcode(hiddenProcessInput.value);
+                    }
                 }
                 function updateActiveDeliveryNoteDisplay(deliveryNote) {
                     const activeCard = document.getElementById('active-delivery-note-card');

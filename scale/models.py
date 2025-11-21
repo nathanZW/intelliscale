@@ -63,6 +63,7 @@ class WeighingProcess(models.Model):
     process_type = models.CharField(max_length=100, blank=True, null=True, choices=[('WeighBridge', 'WeighBridge'),('Manual', 'Manual'), ('Automated', 'Automated'), ('ctl_workflow', 'CTL Workflow'), ('ctl_commercial_workflow', 'CTL Commercial Workflow')], default='WeighBridge')
     allow_marshalling = models.BooleanField(default=False)
     allow_bale_insert = models.BooleanField(default=False)
+    allow_spaces_in_barcode = models.BooleanField(default=False, help_text="If enabled, spaces in barcodes will not be stripped (e.g. for Code 39 Mod 43)")
     
     def __str__(self):
         return self.name
@@ -316,14 +317,21 @@ class DeliveryNote(models.Model):
         """Check if this record came from Odoo"""
         return self.odoo_id is not None
     
-    def find_bale_by_barcode(self, barcode):
+    def find_bale_by_barcode(self, barcode, allow_spaces=False):
         """Find a bale in odoo_data by scale_barcode"""
-        # Trim whitespace from input barcode
-        barcode = str(barcode).strip() if barcode else ''
+        # Trim whitespace from input barcode unless allow_spaces is True
+        if allow_spaces:
+            barcode = str(barcode) if barcode else ''
+        else:
+            barcode = str(barcode).strip() if barcode else ''
+            
         bales = self.odoo_data.get('bales', [])
         
         for bale in bales:
-            scale_barcode = str(bale.get('scale_barcode', '')).strip()
+            scale_barcode = str(bale.get('scale_barcode', ''))
+            if not allow_spaces:
+                scale_barcode = scale_barcode.strip()
+                
             if scale_barcode == barcode:
                 return bale
         return None
@@ -349,39 +357,55 @@ class DeliveryNote(models.Model):
         """Check if all bales have been scanned"""
         return self.get_remaining_bales_count() == 0
     
-    def can_accept_barcode(self, barcode):
+    def can_accept_barcode(self, barcode, allow_spaces=False):
         """Check if this delivery note can accept the given barcode"""
         if self.is_scanning_complete():
             return False
-        if self.has_barcode_been_scanned(barcode):
+        if self.has_barcode_been_scanned(barcode, allow_spaces=allow_spaces):
             return False  # Already scanned
-        return self.find_bale_by_barcode(barcode) is not None
+        return self.find_bale_by_barcode(barcode, allow_spaces=allow_spaces) is not None
     
-    def has_barcode_been_scanned(self, barcode):
+    def has_barcode_been_scanned(self, barcode, allow_spaces=False):
         """Check if a barcode has already been scanned"""
-        barcode = str(barcode).strip() if barcode else ''
-        # Check both trimmed and original barcodes for safety
-        return barcode in self.scanned_barcodes or any(str(b).strip() == barcode for b in self.scanned_barcodes)
+        if allow_spaces:
+            barcode = str(barcode) if barcode else ''
+            # Check exact match only
+            return barcode in self.scanned_barcodes
+        else:
+            barcode = str(barcode).strip() if barcode else ''
+            # Check both trimmed and original barcodes for safety
+            return barcode in self.scanned_barcodes or any(str(b).strip() == barcode for b in self.scanned_barcodes)
     
-    def add_scanned_barcode(self, barcode):
+    def add_scanned_barcode(self, barcode, allow_spaces=False):
         """Add a barcode to the list of scanned barcodes"""
-        # Trim whitespace before storing
-        trimmed_barcode = str(barcode).strip() if barcode else ''
-        if not self.has_barcode_been_scanned(trimmed_barcode):
-            self.scanned_barcodes.append(trimmed_barcode)
+        # Trim whitespace before storing unless allow_spaces is True
+        if allow_spaces:
+            processed_barcode = str(barcode) if barcode else ''
+        else:
+            processed_barcode = str(barcode).strip() if barcode else ''
+            
+        if not self.has_barcode_been_scanned(processed_barcode, allow_spaces=allow_spaces):
+            self.scanned_barcodes.append(processed_barcode)
             self.scanned_bales_count += 1
             return True  # New barcode added
         return False  # Already existed
 
-    def recall_bale(self, barcode):
+    def recall_bale(self, barcode, allow_spaces=False):
         """
         Recalls a bale by removing its barcode from the scanned list,
         decrementing the scanned count, and deleting the weighing record.
         """
-        trimmed_barcode = str(barcode).strip() if barcode else ''
-        if self.has_barcode_been_scanned(trimmed_barcode):
+        if allow_spaces:
+            processed_barcode = str(barcode) if barcode else ''
+        else:
+            processed_barcode = str(barcode).strip() if barcode else ''
+            
+        if self.has_barcode_been_scanned(processed_barcode, allow_spaces=allow_spaces):
             # Remove the barcode
-            self.scanned_barcodes = [b for b in self.scanned_barcodes if str(b).strip() != trimmed_barcode]
+            if allow_spaces:
+                self.scanned_barcodes = [b for b in self.scanned_barcodes if str(b) != processed_barcode]
+            else:
+                self.scanned_barcodes = [b for b in self.scanned_barcodes if str(b).strip() != processed_barcode]
             
             # Decrement the count
             if self.scanned_bales_count > 0:
@@ -390,7 +414,7 @@ class DeliveryNote(models.Model):
             # Delete the corresponding weighing record
             WeighingRecord.objects.filter(
                 delivery_note=self,
-                barcode=trimmed_barcode
+                barcode=processed_barcode
             ).delete()
             
             self.save()

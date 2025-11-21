@@ -120,6 +120,7 @@ class WeighingProcessForm(forms.ModelForm):
             'allow_manual_entry',
             'allow_marshalling',
             'allow_bale_insert',
+            'allow_spaces_in_barcode',
             'is_active',
             'process_type'
         ]
@@ -156,6 +157,9 @@ class WeighingProcessForm(forms.ModelForm):
             'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
         }),
         'allow_bale_insert': forms.CheckboxInput(attrs={
+            'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
+        }),
+        'allow_spaces_in_barcode': forms.CheckboxInput(attrs={
             'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
         }),
         'process_type': forms.Select(attrs={

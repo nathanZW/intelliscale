@@ -408,7 +408,22 @@ def weighing_station(request):
             net_weight = request.POST.get('net_weight', '0')
             unit_of_measure = request.POST.get('unit_of_measure', 'kg')
             notes = request.POST.get('notes', '')
-            barcode = request.POST.get('barcode', '').strip()
+            
+            # Handle barcode stripping based on process settings
+            raw_barcode = request.POST.get('barcode', '')
+            process_id = request.POST.get('process_id')
+            process = None
+            allow_spaces = False
+            
+            if process_id:
+                process = WeighingProcess.objects.get(pk=process_id)
+                allow_spaces = process.allow_spaces_in_barcode
+                
+            if allow_spaces:
+                barcode = raw_barcode # Don't strip if spaces are allowed
+            else:
+                barcode = raw_barcode.strip()
+                
             weighing_record_id = request.POST.get('weighing_record_id') # Get the ID for update
 
             # Round net weight to the nearest weight_rounding
@@ -441,7 +456,7 @@ def weighing_station(request):
             # Handle delivery note association
             delivery_note = None
             delivery_note_id = request.POST.get('delivery_note_id')
-            process = WeighingProcess.objects.get(pk=process_id)
+            # process is already fetched above
             
             # Handle CTL Workflow logic
             if process.process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
@@ -453,10 +468,10 @@ def weighing_station(request):
                         
                         # Verify this barcode belongs to this delivery note
                         if barcode:
-                            if delivery_note.has_barcode_been_scanned(barcode):
+                            if delivery_note.has_barcode_been_scanned(barcode, allow_spaces=allow_spaces):
                                 # This is a rescan/update, allow it to proceed
                                 pass
-                            elif not delivery_note.can_accept_barcode(barcode):
+                            elif not delivery_note.can_accept_barcode(barcode, allow_spaces=allow_spaces):
                                 # If allow_bale_insert is enabled, allow unfamiliar barcodes
                                 if process.allow_bale_insert:
                                     # This is a new barcode for a delivery note with bale insertion enabled
@@ -465,7 +480,7 @@ def weighing_station(request):
                                 else:
                                     # This is a new scan, but it's not valid
                                     # Check if this is just a rescan of an already-scanned barcode from the same delivery note
-                                    if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
+                                    if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode, allow_spaces=allow_spaces):
                                         # This barcode belongs to this delivery note, allow rescan/update
                                         pass
                                     elif delivery_note.is_scanning_complete():
@@ -480,7 +495,7 @@ def weighing_station(request):
                         found_delivery_note = None
                         
                         for dnote in delivery_notes_with_barcode:
-                            if dnote.find_bale_by_barcode(barcode):
+                            if dnote.find_bale_by_barcode(barcode, allow_spaces=allow_spaces):
                                 found_delivery_note = dnote
                                 break
                         
@@ -489,9 +504,9 @@ def weighing_station(request):
                             delivery_note = DeliveryNote.objects.select_for_update().get(pk=found_delivery_note.pk)
 
                             # Check if this delivery note can accept this barcode
-                            if not delivery_note.can_accept_barcode(barcode):
+                            if not delivery_note.can_accept_barcode(barcode, allow_spaces=allow_spaces):
                                 # Check if this is just a rescan of an already-scanned barcode from the same delivery note
-                                if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode):
+                                if delivery_note.is_scanning_complete() and delivery_note.find_bale_by_barcode(barcode, allow_spaces=allow_spaces):
                                     # This barcode belongs to this delivery note, allow rescan/update
                                     # But only if the delivery note is currently being scanned
                                     if not delivery_note.is_being_scanned:
@@ -501,7 +516,7 @@ def weighing_station(request):
                                     messages.error(request, f'Delivery note {delivery_note.delivery_note_number} is already complete.')
                                     return redirect('scale:weighing_station')
                                 # Allow re-scans by checking this after can_accept_barcode
-                                elif delivery_note.has_barcode_been_scanned(barcode):
+                                elif delivery_note.has_barcode_been_scanned(barcode, allow_spaces=allow_spaces):
                                     # This is a re-scan, so we allow it, but only if delivery note is already being scanned
                                     if not delivery_note.is_being_scanned:
                                         messages.error(request, f'Cannot recall and update. This bale has already been scanned for delivery note {delivery_note.delivery_note_number}.')
@@ -683,7 +698,7 @@ def weighing_station(request):
             # Handle CTL Workflow completion logic
             if process.process_type in ['ctl_workflow', 'ctl_commercial_workflow'] and weighing_record and delivery_note:
                 # Add barcode to scanned list (this handles increment automatically)
-                if delivery_note.add_scanned_barcode(barcode):
+                if delivery_note.add_scanned_barcode(barcode, allow_spaces=allow_spaces):
                     delivery_note.save()
                     # messages.success(request, f'Bale {barcode} scanned successfully.')
                 else:
@@ -756,8 +771,10 @@ def weighing_station(request):
     
     # Create a dictionary of bale insert allowance for each process
     process_allow_bale_insert = {}
+    process_allow_spaces_in_barcode = {}
     for process in processes:
         process_allow_bale_insert[process.id] = process.allow_bale_insert
+        process_allow_spaces_in_barcode[process.id] = process.allow_spaces_in_barcode
     
     context = {
         'scales': scales,
@@ -770,6 +787,7 @@ def weighing_station(request):
         'process_custom_fields': json.dumps(process_custom_fields),
         'process_marshalling': json.dumps(process_marshalling),
         'process_allow_bale_insert': json.dumps(process_allow_bale_insert),
+        'process_allow_spaces_in_barcode': json.dumps(process_allow_spaces_in_barcode),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
         'active_delivery_note': active_delivery_note,
@@ -780,8 +798,19 @@ def weighing_station(request):
 
 
 def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type=None, process_id=None, delivery_note=None):
-    # Trim whitespace from barcode
-    barcode = str(barcode).strip() if barcode else ''
+    # Trim whitespace from barcode unless process allows spaces
+    allow_spaces = False
+    if process_id:
+        try:
+            process = WeighingProcess.objects.get(pk=process_id)
+            allow_spaces = process.allow_spaces_in_barcode
+        except WeighingProcess.DoesNotExist:
+            pass
+            
+    if allow_spaces:
+        barcode = str(barcode) if barcode else ''
+    else:
+        barcode = str(barcode).strip() if barcode else ''
 
         
     
