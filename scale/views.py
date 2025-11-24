@@ -466,6 +466,11 @@ def weighing_station(request):
                         # Use the active delivery note from the form, and lock the row for update
                         delivery_note = get_object_or_404(DeliveryNote.objects.select_for_update(), pk=delivery_note_id)
                         
+                        # Check if delivery note is in 'checked' state for ctl_workflow
+                        if process.process_type == 'ctl_workflow' and delivery_note.get_state() != 'checked':
+                            messages.error(request, f'Delivery Note {delivery_note.delivery_note_number} has not been checked (Status: {delivery_note.get_state()}).')
+                            return redirect('scale:weighing_station')
+                        
                         # Verify this barcode belongs to this delivery note
                         if barcode:
                             if delivery_note.has_barcode_been_scanned(barcode, allow_spaces=allow_spaces):
@@ -502,6 +507,11 @@ def weighing_station(request):
                         if found_delivery_note:
                             # Lock the found delivery note for update
                             delivery_note = DeliveryNote.objects.select_for_update().get(pk=found_delivery_note.pk)
+
+                            # Check if delivery note is in 'checked' state for ctl_workflow
+                            if process.process_type == 'ctl_workflow' and delivery_note.get_state() != 'checked':
+                                messages.error(request, f'Delivery Note {delivery_note.delivery_note_number} has not been checked (Status: {delivery_note.get_state()}).')
+                                return redirect('scale:weighing_station')
 
                             # Check if this delivery note can accept this barcode
                             if not delivery_note.can_accept_barcode(barcode, allow_spaces=allow_spaces):
@@ -2653,6 +2663,15 @@ def find_delivery_note_by_barcode(request):
 
         for dnote in delivery_notes:
             if dnote.find_bale_by_barcode(barcode):
+                # Check active process for ctl_workflow restriction
+                active_process = WeighingProcess.objects.filter(is_active=True).first()
+                if active_process and active_process.process_type == 'ctl_workflow':
+                    if dnote.get_state() != 'checked':
+                        return JsonResponse({
+                            'success': False, 
+                            'message': f'Delivery Note {dnote.delivery_note_number} has not been checked (Status: {dnote.get_state()}).'
+                        })
+
                 # Check if this delivery note is already being scanned by someone else
                 # For now, we'll allow only one delivery note to be scanned at a time
                 currently_scanned = DeliveryNote.objects.filter(is_being_scanned=True).first()
@@ -2761,6 +2780,16 @@ def activate_delivery_note(request, pk):
             
             # Activate the selected delivery note
             dnote = get_object_or_404(DeliveryNote, pk=pk)
+            
+            # Check active process for ctl_workflow restriction
+            active_process = WeighingProcess.objects.filter(is_active=True).first()
+            if active_process and active_process.process_type == 'ctl_workflow':
+                if dnote.get_state() != 'checked':
+                    return JsonResponse({
+                        'success': False, 
+                        'message': f'Delivery Note {dnote.delivery_note_number} has not been checked (Status: {dnote.get_state()}).'
+                    })
+            
             dnote.is_being_scanned = True
             dnote.save()
 
