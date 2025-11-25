@@ -619,44 +619,49 @@ def weighing_station(request):
                     existing_record = WeighingRecord.objects.filter(barcode=barcode, delivery_note=delivery_note).first()
                 
                 if existing_record:
-                    # Update existing record - call ERP first
-                    erp_success = send_to_erp(barcode, net_weight, existing_record.weighing_scale_id, existing_record.id, request, custom_data, process.process_type, process.id, delivery_note)
+                    # Update existing record BEFORE calling ERP
+                    existing_record.scale = get_object_or_404(Scale, pk=scale_id)
+                    existing_record.weighing_scale_id = existing_record.scale.scale_id
+                    existing_record.product = get_object_or_404(Product, pk=product_id)
+                    existing_record.process = process
+                    existing_record.user = request.user
+                    existing_record.gross_weight = gross_weight
+                    existing_record.tare_weight = tare_weight
+                    existing_record.net_weight = net_weight
+                    existing_record.unit_of_measure = unit_of_measure
+                    existing_record.notes = notes
+                    
+                    # If marshalling is allowed, preserve existing marshalling fields (lot_number, group_number)
+                    # unless they are being explicitly updated in the current request
+                    if existing_record.custom_data and isinstance(existing_record.custom_data, dict):
+                        existing_record.custom_data.update(custom_data)
+                    else:
+                        existing_record.custom_data = custom_data
+                    
+                    existing_record.is_synced = False # Mark as not synced initially
+                    existing_record.save()
+                    
+                    # Call ERP with the updated record
+                    erp_success = send_to_erp(barcode, net_weight, existing_record.weighing_scale_id, existing_record.id, request, existing_record.custom_data, process.process_type, process.id, delivery_note)
                     
                     if erp_success:
-                        # Only update the local record if ERP call was successful
-                        existing_record.scale = get_object_or_404(Scale, pk=scale_id)
-                        existing_record.weighing_scale_id = existing_record.scale.scale_id
-                        existing_record.product = get_object_or_404(Product, pk=product_id)
-                        existing_record.process = process
-                        existing_record.user = request.user
-                        existing_record.gross_weight = gross_weight
-                        existing_record.tare_weight = tare_weight
-                        existing_record.net_weight = net_weight
-                        existing_record.unit_of_measure = unit_of_measure
-                        existing_record.notes = notes
-                        
-                        # If marshalling is allowed, preserve existing marshalling fields (lot_number, group_number)
-                        # unless they are being explicitly updated in the current request
-                        if existing_record.custom_data and isinstance(existing_record.custom_data, dict):
-                            existing_record.custom_data.update(custom_data)
-                        else:
-                            existing_record.custom_data = custom_data
                         existing_record.is_synced = True  # Mark as synced since ERP call succeeded
                         existing_record.save()
                         weighing_record = existing_record
                         messages.success(request, f'Weight for bale {barcode} updated successfully.')
                     else:
-                        # Get the error message from the unsynced record
-                        unsynced_record = WeighingRecord.objects.filter(barcode=barcode, net_weight=net_weight, is_synced=False).order_by('-timestamp').first()
-                        error_message = "Unknown error occurred during ERP communication"
-                        if unsynced_record and unsynced_record.sync_error_message:
-                            error_message = unsynced_record.sync_error_message
+                        # Record already updated with error message (saved by send_to_erp)
+                        # Reload to ensure we have the latest error message
+                        existing_record.refresh_from_db()
+                        error_message = existing_record.sync_error_message or "Unknown error occurred during ERP communication"
                         messages.error(request, f'Error sending to ERP: {error_message}')
                         return redirect('scale:weighing_station')
                 else:
-                    # Create new record only if ERP call is successful - call ERP first
+                    # Create new record BEFORE calling ERP so we can save errors
                     scale = get_object_or_404(Scale, pk=scale_id)
-                    temp_weighing_record = WeighingRecord(
+                    
+                    # Create the record immediately
+                    weighing_record = WeighingRecord.objects.create(
                         scale=scale,
                         weighing_scale_id=scale.scale_id,
                         product_id=product_id,
@@ -669,39 +674,23 @@ def weighing_station(request):
                         notes=notes,
                         custom_data=custom_data,
                         delivery_note=delivery_note,
-                        barcode=barcode
+                        barcode=barcode,
+                        is_synced=False # Start as not synced
                     )
                     
-                    # Call ERP first
-                    erp_success = send_to_erp(barcode, net_weight, temp_weighing_record.weighing_scale_id, None, request, temp_weighing_record.custom_data, process.process_type, process.id, delivery_note)
+                    # Call ERP with the new record ID
+                    erp_success = send_to_erp(barcode, net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, process.process_type, process.id, delivery_note)
                     
                     if erp_success:
-                        # Now create the actual database record if ERP call was successful
-                        weighing_record = WeighingRecord.objects.create(
-                            scale=scale,
-                            weighing_scale_id=scale.scale_id,
-                            product_id=product_id,
-                            process_id=process_id,
-                            user=request.user,
-                            gross_weight=gross_weight,
-                            tare_weight=tare_weight,
-                            net_weight=net_weight,
-                            unit_of_measure=unit_of_measure,
-                            notes=notes,
-                            custom_data=custom_data,
-                            delivery_note=delivery_note,
-                            barcode=barcode
-                        )
-                        # Since ERP was successful, mark the record as synced
+                        # Mark as synced
                         weighing_record.is_synced = True
                         weighing_record.save()
                         messages.success(request, 'Weighing record created successfully.')
                     else:
-                        # Get the error message from the unsynced record
-                        unsynced_record = WeighingRecord.objects.filter(barcode=barcode, net_weight=net_weight, is_synced=False).order_by('-timestamp').first()
-                        error_message = "Unknown error occurred during ERP communication"
-                        if unsynced_record and unsynced_record.sync_error_message:
-                            error_message = unsynced_record.sync_error_message
+                        # Record already exists with error message (saved by send_to_erp)
+                        # Reload to ensure we have the latest error message
+                        weighing_record.refresh_from_db()
+                        error_message = weighing_record.sync_error_message or "Unknown error occurred during ERP communication"
                         messages.error(request, f'Error sending to ERP: {error_message}')
                         return redirect('scale:weighing_station')
             
@@ -1566,6 +1555,14 @@ def close_delivery_note(request, pk):
                     'message': f'Delivery note {delivery_note.delivery_note_number} is not fully scanned. Cannot update Odoo status to laid.'
                 })
 
+            # Check for unsynced records
+            unsynced_count = WeighingRecord.objects.filter(delivery_note=delivery_note, is_synced=False).count()
+            if unsynced_count > 0:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Cannot close delivery note. There are {unsynced_count} unsynced weighing records. Please resolve these errors first.'
+                })
+
             # First, update the status in Odoo to 'laid'
             success = update_dnote_completion_status_with_api_key(delivery_note)
             if not success:
@@ -1682,7 +1679,13 @@ def deactivate_active_delivery_note(request, pk):
             delivery_note.is_being_scanned = False
             # Only change to closed if it was actually completed
             if delivery_note.is_scanning_complete():
-                delivery_note.status = 'Closed'
+                # Check for unsynced records before closing
+                unsynced_count = WeighingRecord.objects.filter(delivery_note=delivery_note, is_synced=False).count()
+                if unsynced_count == 0:
+                    delivery_note.status = 'Closed'
+                # If there are unsynced records, we leave it as 'Open' (or whatever it was) 
+                # but still allow deactivation of scanning state.
+            
             delivery_note.save()
             
             return JsonResponse({
