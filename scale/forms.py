@@ -120,6 +120,7 @@ class WeighingProcessForm(forms.ModelForm):
             'allow_manual_entry',
             'allow_marshalling',
             'allow_bale_insert',
+            'use_code39_mod43_validation',
             'allow_spaces_in_barcode',
             'is_active',
             'process_type'

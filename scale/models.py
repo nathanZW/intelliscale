@@ -64,6 +64,7 @@ class WeighingProcess(models.Model):
     allow_marshalling = models.BooleanField(default=False)
     allow_bale_insert = models.BooleanField(default=False)
     allow_spaces_in_barcode = models.BooleanField(default=False, help_text="If enabled, spaces in barcodes will not be stripped (e.g. for Code 39 Mod 43)")
+    use_code39_mod43_validation = models.BooleanField(default=False, help_text="If enabled, validates scanned barcodes using Code 39 Mod 43 algorithm.")
     
     def __str__(self):
         return self.name

@@ -234,6 +234,19 @@
                         Code 39 Mod 43).</p>
                 </div>
 
+                <!-- Use Code 39 Mod 43 Validation -->
+                <div>
+                    <label for="{{ form.use_code39_mod43_validation.id_for_label }}"
+                        class="block text-sm font-medium text-zinc-700">Use Code 39 Mod 43 Validation</label>
+                    <div class="mt-1">
+                        {{ form.use_code39_mod43_validation }}
+                    </div>
+                    {% if form.use_code39_mod43_validation.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.use_code39_mod43_validation.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">Enable Code 39 Mod 43 checksum validation for barcodes.</p>
+                </div>
+
                 <!-- Status -->
                 <div>
                     <div class="flex items-center mt-1">

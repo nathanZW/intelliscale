@@ -768,12 +768,13 @@ def weighing_station(request):
     for process in processes:
         process_marshalling[process.id] = process.allow_marshalling
     
-    # Create a dictionary of bale insert allowance for each process
     process_allow_bale_insert = {}
     process_allow_spaces_in_barcode = {}
+    process_use_code39_mod43_validation = {}
     for process in processes:
         process_allow_bale_insert[process.id] = process.allow_bale_insert
         process_allow_spaces_in_barcode[process.id] = process.allow_spaces_in_barcode
+        process_use_code39_mod43_validation[process.id] = process.use_code39_mod43_validation
     
     context = {
         'scales': scales,
@@ -787,6 +788,7 @@ def weighing_station(request):
         'process_marshalling': json.dumps(process_marshalling),
         'process_allow_bale_insert': json.dumps(process_allow_bale_insert),
         'process_allow_spaces_in_barcode': json.dumps(process_allow_spaces_in_barcode),
+        'process_use_code39_mod43_validation': json.dumps(process_use_code39_mod43_validation),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
         'active_delivery_note': active_delivery_note,

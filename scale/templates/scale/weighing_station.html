@@ -577,12 +577,50 @@
         // Parse process allow spaces in barcode data from the template
         const processAllowSpacesInBarcode = JSON.parse('{{ process_allow_spaces_in_barcode|escapejs }}');
 
+        // Parse process use code39 mod 43 validation data from the template
+        const processUseCode39Mod43Validation = JSON.parse('{{ process_use_code39_mod43_validation|escapejs }}');
+
         // Global variable to track current process allow spaces setting
         let currentProcessAllowsSpaces = false;
+
+        // Global variable to track current process validation setting
+        let currentProcessUsesCode39Mod43 = false;
 
         // Helper function to check if a process allows spaces in barcode
         function checkAllowSpacesInBarcode(processId) {
             return processId && processAllowSpacesInBarcode[processId] ? processAllowSpacesInBarcode[processId] : false;
+        }
+
+        // Helper function to check if a process uses Code 39 Mod 43 validation
+        function checkUseCode39Mod43Validation(processId) {
+            return processId && processUseCode39Mod43Validation[processId] ? processUseCode39Mod43Validation[processId] : false;
+        }
+
+        // Code 39 Mod 43 Validation Function
+        function validateCode39Mod43(barcode) {
+            if (!barcode || barcode.length < 1) return false;
+
+            // The last character is the checksum
+            const inputChecksum = barcode.slice(-1);
+            const data = barcode.slice(0, -1);
+
+            const charSet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+            let total = 0;
+
+            for (let i = 0; i < data.length; i++) {
+                const char = data[i];
+                const value = charSet.indexOf(char);
+                if (value === -1) {
+                    // Invalid character found
+                    return false;
+                }
+                total += value;
+            }
+
+            const remainder = total % 43;
+            const calculatedChecksum = charSet[remainder];
+
+            return inputChecksum === calculatedChecksum;
         }
 
         // Helper function to get barcode value conditionally trimmed based on current process
@@ -1860,6 +1898,16 @@
 
         // Centralized barcode processing function
         function processBarcodeInput(barcodeValue) {
+            // Validate Code 39 Mod 43 if enabled for the current process
+            if (currentProcessUsesCode39Mod43) {
+                if (!validateCode39Mod43(barcodeValue)) {
+                    showNotification('Invalid Code 39 Barcode, Try Again', 'error');
+                    barcodeInput.value = '';
+                    barcodeInput.focus();
+                    return;
+                }
+            }
+
             if (barcodeInput.dataset.processing === 'true') {
                 console.log('Already processing a barcode, ignoring');
                 return;
@@ -2151,6 +2199,7 @@
                         // Update current process allow spaces in barcode setting
                         const processId = this.value;
                         currentProcessAllowsSpaces = checkAllowSpacesInBarcode(processId);
+                        currentProcessUsesCode39Mod43 = checkUseCode39Mod43Validation(processId);
 
                         // Update custom fields based on new process
                         customFieldsContainer.classList.toggle('hidden', !processId);
@@ -2185,11 +2234,13 @@
                 // Initialize allow spaces in barcode setting based on current process
                 if (initialProcessId) {
                     currentProcessAllowsSpaces = checkAllowSpacesInBarcode(initialProcessId);
+                    currentProcessUsesCode39Mod43 = checkUseCode39Mod43Validation(initialProcessId);
                 } else {
                     // Check for the hidden process input (when only one process exists)
                     const hiddenProcessInput = document.getElementById('process-id-input');
                     if (hiddenProcessInput && hiddenProcessInput.value) {
                         currentProcessAllowsSpaces = checkAllowSpacesInBarcode(hiddenProcessInput.value);
+                        currentProcessUsesCode39Mod43 = checkUseCode39Mod43Validation(hiddenProcessInput.value);
                     }
                 }
                 function updateActiveDeliveryNoteDisplay(deliveryNote) {
@@ -2865,4 +2916,3 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 {% endblock %}
-    
