@@ -1351,7 +1351,15 @@ def sync_all_unsynced(request):
     weighing_records = WeighingRecord.objects.filter(is_synced=False)
     for weighing_record in weighing_records:
         print('Syncing weighing record: ', weighing_record.id)
-        send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, weighing_record.process.process_type, weighing_record.process.id, weighing_record.delivery_note)
+        success = send_to_erp(weighing_record.barcode, weighing_record.net_weight, weighing_record.weighing_scale_id, weighing_record.id, request, weighing_record.custom_data, weighing_record.process.process_type, weighing_record.process.id, weighing_record.delivery_note)
+        
+        if success and weighing_record.delivery_note:
+            allow_spaces = False
+            if weighing_record.process:
+                allow_spaces = weighing_record.process.allow_spaces_in_barcode
+            
+            weighing_record.delivery_note.add_scanned_barcode(weighing_record.barcode, allow_spaces=allow_spaces)
+            weighing_record.delivery_note.save()
     return redirect('scale:weighing_record_list')
 
 
@@ -2985,7 +2993,7 @@ def recall_and_update_bale(request):
                 
                 response_data = {
                     'success': True,
-                    'message': f'Bale {barcode} recalled (set to minimal weight) and removed from records. You can now scan it again for a new weighing.',
+                    'message': f'Bale {barcode} recalled and removed from local records. You can now scan it again.',
                     'delivery_note': {
                         'scanned_bales': delivery_note.scanned_bales_count,
                         'total_bales': total_bales,
