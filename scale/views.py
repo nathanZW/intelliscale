@@ -1167,13 +1167,36 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     print(response.text)
                     
                     if response.status_code in [200, 201]:  # 201 Created is also successful
-                        # Update weighing record with erp response if weighing_record_id exists
-                        if weighing_record_id:
-                            weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
-                            weighing_record.is_synced = True
-                            weighing_record.last_sync_attempt = timezone.now()
-                            weighing_record.save()
-                        return True
+                        # Check if the response body contains success=false
+                        try:
+                            response_json = response.json()
+                            if isinstance(response_json, dict) and response_json.get('success') is False:
+                                # The API returned 200 but with success=false in the body
+                                error_message = response_json.get('message', response.text)
+                                if weighing_record_id:
+                                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                                    weighing_record.is_synced = False
+                                    weighing_record.last_sync_attempt = timezone.now()
+                                    weighing_record.sync_error_message = f"ERP API call failed: {error_message}"
+                                    weighing_record.save()
+                                return False
+                            else:
+                                # API call was successful (success is True or not present)
+                                # Update weighing record with erp response if weighing_record_id exists
+                                if weighing_record_id:
+                                    weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                                    weighing_record.is_synced = True
+                                    weighing_record.last_sync_attempt = timezone.now()
+                                    weighing_record.save()
+                                return True
+                        except ValueError:
+                            # If response is not JSON, assume success for 200/201 status
+                            if weighing_record_id:
+                                weighing_record = WeighingRecord.objects.get(id=weighing_record_id)
+                                weighing_record.is_synced = True
+                                weighing_record.last_sync_attempt = timezone.now()
+                                weighing_record.save()
+                            return True
                     elif response.status_code >= 400:
                         # Handle client/server error responses
                         if weighing_record_id:
