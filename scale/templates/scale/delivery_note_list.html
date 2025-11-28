@@ -43,8 +43,16 @@
     {% endif %}
 
     <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
-        <div class="px-6 py-4 border-b border-zinc-200">
+        <div class="px-6 py-4 border-b border-zinc-200 flex justify-between items-center">
             <h2 class="text-lg font-medium text-zinc-900">Delivery Notes</h2>
+            <div class="relative">
+                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <svg class="h-5 w-5 text-zinc-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <input type="text" id="delivery-note-search" class="block w-full rounded-md border-0 py-1.5 pl-10 text-zinc-900 ring-1 ring-inset ring-zinc-300 placeholder:text-zinc-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6" placeholder="Filter by number...">
+            </div>
         </div>
         {% if delivery_notes %}
         <div class="overflow-x-auto">
@@ -315,6 +323,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Restore button
                 syncButton.disabled = false;
                 syncButton.innerHTML = originalText;
+            });
+        });
+    }
+
+    // Delivery Note Filtering
+    const searchInput = document.getElementById('delivery-note-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr');
+            
+            rows.forEach(row => {
+                const deliveryNoteCell = row.cells[0];
+                if (deliveryNoteCell) {
+                    // Get text content but exclude the "ACTIVE" badge text if possible, 
+                    // though simple inclusion check usually works fine as long as user types the number.
+                    // Let's just check the whole cell text for simplicity and robustness.
+                    const text = deliveryNoteCell.textContent.trim().toLowerCase();
+                    if (text.includes(searchTerm)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
             });
         });
     }
