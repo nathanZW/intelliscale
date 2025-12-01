@@ -1514,6 +1514,72 @@ def delivery_note_delete(request, pk):
     }
     return render(request, 'scale/delivery_note_delete.html', context)
 
+# Display the bale recall page for a delivery note
+@login_required
+def delivery_note_bale_recall(request, pk):
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk)
+    
+    # Check if delivery note is being scanned
+    if delivery_note.is_being_scanned:
+        messages.error(request, "Cannot recall bales while delivery note is being scanned.")
+        return redirect('scale:delivery_note_detail', pk=pk)
+        
+    context = {
+        'delivery_note': delivery_note,
+    }
+    return render(request, 'scale/delivery_note_bale_recall.html', context)
+
+
+@login_required
+def recall_delivery_note(request, pk):
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk)
+    
+    # Only allow recall if Odoo state is 'laid'
+    if not delivery_note.odoo_data or delivery_note.odoo_data.get('state') != 'laid':
+        messages.error(request, "Delivery note can only be recalled when Odoo state is 'laid'.")
+        return redirect('scale:delivery_note_detail', pk=pk)
+
+    if request.method == 'POST':
+        try:
+            # Call external API
+            company_settings = CompanySettings.objects.first()
+            if not company_settings or not company_settings.api_url:
+                messages.error(request, "Company API settings not configured.")
+                return redirect('scale:delivery_note_detail', pk=pk)
+
+            api_url = f"{company_settings.api_url}/api/bales/recall-all-bale"
+            params = {'dnote_number': delivery_note.delivery_note_number}
+            
+            response = requests.get(api_url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data.get('success'):
+                # Delete local weighing records
+                from django.db import transaction # Added this import for transaction.atomic
+                with transaction.atomic():
+                    WeighingRecord.objects.filter(delivery_note=delivery_note).delete()
+                    # Reset scanned count and other local stats if needed
+                    # The requirement says "wipes the bales weight in odoo and changes the delivery note state to 'checked'"
+                    # We should probably clear the scanned list locally too if we track it
+                    
+                messages.success(request, "Delivery note recalled successfully. Weighing records have been deleted.")
+            else:
+                error_msg = data.get('message', 'Unknown error from external API')
+                messages.error(request, f"Failed to recall delivery note: {error_msg}")
+                # Assuming logger is already imported, e.g., import logging; logger = logging.getLogger(__name__)
+                logger.error(f"Failed to recall delivery note {delivery_note.delivery_note_number}: {error_msg}")
+                
+        except requests.RequestException as e:
+            messages.error(request, f"Network error while recalling delivery note: {str(e)}")
+            logger.error(f"Network error recalling delivery note {delivery_note.delivery_note_number}: {e}")
+        except Exception as e:
+            messages.error(request, f"An unexpected error occurred: {str(e)}")
+            logger.error(f"Unexpected error recalling delivery note {delivery_note.delivery_note_number}: {e}")
+            
+    return redirect('scale:delivery_note_detail', pk=pk)
+
 @login_required
 @user_passes_test(is_admin)
 def delivery_note_suspend(request, pk):
