@@ -1550,7 +1550,12 @@ def recall_delivery_note(request, pk):
             api_url = f"{company_settings.api_url}/api/bales/recall-all-bale"
             params = {'dnote_number': delivery_note.delivery_note_number}
             
-            response = requests.get(api_url, params=params, timeout=10)
+            headers = {
+                "User-Agent": "insomnia/11.5.0",
+                "X-API-Key": company_settings.api_key
+            }
+            
+            response = requests.post(api_url, params=params, headers=headers, timeout=10)
             response.raise_for_status()
             
             data = response.json()
@@ -2019,6 +2024,126 @@ def recall_bale(request, pk):
         'success': False,
         'message': 'Invalid request method.'
     })
+
+
+@login_required
+@user_passes_test(is_admin)
+def close_commercial_delivery_note(request, pk):
+    """
+    Close a commercial delivery note via external API.
+    This is used for the ctl_commercial_workflow.
+    """
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'message': 'Invalid request method.'
+        })
+    
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk)
+    
+    # Get company settings for API configuration
+    company_settings = CompanySettings.objects.first()
+    if not company_settings or not company_settings.api_url:
+        return JsonResponse({
+            'success': False,
+            'message': 'Company settings or API URL not configured.'
+        })
+        
+    api_key = company_settings.api_key
+    
+    try:
+        # Construct the API URL
+        # The user specified: company_settings.api_url/api/grower-delivery-notes/close-marshalled-at-scale
+        # And it takes document_number as a parameter
+        url = f"{company_settings.api_url}/api/grower-delivery-notes/close-marshalled-at-scale"
+        
+        # Prepare parameters
+        params = {
+            'document_number': delivery_note.delivery_note_number
+        }
+        
+        headers = {
+            "User-Agent": "insomnia/11.5.0",
+            "X-API-Key": api_key
+        }
+        
+        print(f"Calling close-marshalled-at-scale with params: {params}")
+        
+        # Make the API call
+        # User confirmed POST request
+        response = requests.post(url, params=params, headers=headers, timeout=10)
+        
+        print(f"close-marshalled-at-scale response status: {response.status_code}")
+        print(f"close-marshalled-at-scale response text: {response.text}")
+        
+        if response.status_code in [200, 201]:
+            try:
+                response_json = response.json()
+                
+                # Check for success flag in response body if present
+                if isinstance(response_json, dict):
+                    if response_json.get('success') is False:
+                        return JsonResponse({
+                            'success': False,
+                            'message': response_json.get('message', 'External API returned failure.')
+                        })
+                
+                # If successful, we should also close/deactivate the delivery note locally
+                # similar to close_delivery_note view but without the local validation checks
+                # since the external API handles that logic
+                
+                delivery_note.status = 'Closed'
+                delivery_note.is_being_scanned = False
+                delivery_note.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Delivery note {delivery_note.delivery_note_number} closed successfully.'
+                })
+                
+            except ValueError:
+                # If response is not JSON but status is 200, assume success
+                delivery_note.status = 'Closed'
+                delivery_note.is_being_scanned = False
+                delivery_note.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Delivery note {delivery_note.delivery_note_number} closed successfully.'
+                })
+        else:
+            # Handle error status codes
+            error_message = f"API Error {response.status_code}: {response.text}"
+            try:
+                response_json = response.json()
+                if isinstance(response_json, dict) and 'message' in response_json:
+                    error_message = response_json['message']
+            except:
+                pass
+                
+            return JsonResponse({
+                'success': False,
+                'message': error_message
+            })
+            
+    except requests.Timeout as e:
+        print(f"Timeout error during close_commercial_delivery_note: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Timeout error communicating with external API: {str(e)}'
+        })
+    except requests.RequestException as e:
+        print(f"Request error during close_commercial_delivery_note: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error communicating with external API: {str(e)}'
+        })
+    except Exception as e:
+        print(f"Unexpected error in close_commercial_delivery_note: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Unexpected error: {str(e)}'
+        })
 
 #################################################################################################
 # Weighing Record Management Views

@@ -2222,6 +2222,12 @@
                 }
                 // Initialize visibility on page load
                 updateDeliveryNoteVisibility();
+                
+                // Fix for ctl_commercial_workflow button visibility on page load
+                if (processType === 'ctl_commercial_workflow' && document.getElementById('active-delivery-note-id').value) {
+                    const confirmationDiv = document.getElementById('dnote-closure-confirmation');
+                    if (confirmationDiv) confirmationDiv.classList.remove('hidden');
+                }
                 fetchDeliveryNotes();
                 // Update marshalling fields on initial load
                 updateMarshallingFields();
@@ -2281,10 +2287,17 @@
                     updateScannedBarcodesList(deliveryNote.scanned_records_data || []);
                     // Check for completion and show confirmation button
                     const confirmationDiv = document.getElementById('dnote-closure-confirmation');
-                    if (deliveryNote.scanned_bales >= deliveryNote.total_bales) {
+                    
+                    // For ctl_commercial_workflow, always show the confirmation button if there's an active delivery note
+                    if (processType === 'ctl_commercial_workflow') {
                         if (confirmationDiv) confirmationDiv.classList.remove('hidden');
                     } else {
-                        if (confirmationDiv) confirmationDiv.classList.add('hidden');
+                        // Original logic for other workflows
+                        if (deliveryNote.scanned_bales >= deliveryNote.total_bales) {
+                            if (confirmationDiv) confirmationDiv.classList.remove('hidden');
+                        } else {
+                            if (confirmationDiv) confirmationDiv.classList.add('hidden');
+                        }
                     }
                 }
                 function updateScannedBarcodesList(scannedRecordsData) {
@@ -2531,7 +2544,12 @@
                 this.textContent = 'Closing...';
                 this.disabled = true;
                 
-                const url = "{% url 'scale:close_delivery_note' 0 %}".replace('0', dnoteId);
+                let url = "{% url 'scale:close_delivery_note' 0 %}".replace('0', dnoteId);
+                
+                // Use different endpoint for ctl_commercial_workflow
+                if (processType === 'ctl_commercial_workflow') {
+                    url = "{% url 'scale:close_commercial_delivery_note' 0 %}".replace('0', dnoteId);
+                }
                 
                 $.ajax({
                     url: url,
