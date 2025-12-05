@@ -1858,6 +1858,16 @@
         
                 const barcodeInput = document.getElementById('barcode-input');
 
+        // Auto-uppercase barcode input for CTL workflows
+        barcodeInput.addEventListener('input', function() {
+            if (processType === 'ctl_workflow' || processType === 'ctl_commercial_workflow') {
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.toUpperCase();
+                this.setSelectionRange(start, end);
+            }
+        });
+
         // Ensure the input stays focused for scanning
         barcodeInput.addEventListener('focus', function() {
             console.log('Barcode input focused - ready to scan');
