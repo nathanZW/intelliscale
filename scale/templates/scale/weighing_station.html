@@ -1660,7 +1660,7 @@
         document.getElementById('weighing-form').addEventListener('submit', function(event) {
             const scaleId = scaleSelect.value;
             // const productId = productSelect.value;
-            const processId = processSelect.value;
+            const processId = processSelect.value || (document.getElementById('process-id-input') ? document.getElementById('process-id-input').value : '');
             const grossWeight = grossWeightInput.value;
             const tareWeight = tareWeightInput.value;
             const netWeight = netWeightInput.value;
