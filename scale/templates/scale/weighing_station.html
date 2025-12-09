@@ -580,7 +580,14 @@
         // Parse process use code39 mod 43 validation data from the template
         const processUseCode39Mod43Validation = JSON.parse('{{ process_use_code39_mod43_validation|escapejs }}');
 
+        // Parse process rolling hessian config
+        const processRollingHessianConfig = JSON.parse('{{ process_rolling_hessian_config|escapejs }}');
+        
+        // Parse prefilled hessian value
+        const prefilledHessianValue = '{{ prefilled_hessian_value|escapejs }}';
+
         // Global variable to track current process allow spaces setting
+
         let currentProcessAllowsSpaces = false;
 
         // Global variable to track current process validation setting
@@ -594,6 +601,11 @@
         // Helper function to check if a process uses Code 39 Mod 43 validation
         function checkUseCode39Mod43Validation(processId) {
             return processId && processUseCode39Mod43Validation[processId] ? processUseCode39Mod43Validation[processId] : false;
+        }
+
+        // Helper function to check if a process uses rolling hessian
+        function checkRollingHessianEnabled(processId) {
+            return processId && processRollingHessianConfig[processId] ? processRollingHessianConfig[processId] : false;
         }
 
         // Code 39 Mod 43 Validation Function
@@ -1224,6 +1236,24 @@
                         input.id = fieldId;
                         input.name = fieldName;
                         input.setAttribute('data-field-name', field.name);
+                        
+                        // Check for Rolling Hessian
+                        if (checkRollingHessianEnabled(currentProcessId)) {
+                             if (field.name.toLowerCase() === 'hessian id' || field.name.toLowerCase() === 'hessian_id') {
+                                 if (prefilledHessianValue && !input.value) {
+                                     input.value = prefilledHessianValue;
+                                     // Highlight the field to indicate it's a rolling value
+                                     input.classList.add('bg-blue-50', 'border-blue-500');
+                                     input.title = "Auto-filled from previous weighing (Rolling Hessian)";
+                                     
+                                     // Remove highlight on user interaction
+                                     input.addEventListener('input', function() {
+                                         this.classList.remove('bg-blue-50', 'border-blue-500');
+                                         this.removeAttribute('title');
+                                     }, { once: true });
+                                 }
+                             }
+                        }
                         
                         if (field.placeholder) {
                             input.placeholder = field.placeholder;
@@ -2577,6 +2607,16 @@
                             document.getElementById('dnote-closure-confirmation').classList.add('hidden');
                             document.getElementById('barcode-input').value = '';
                             document.getElementById('barcode-input').focus();
+                            
+                            // Clear custom fields and reset highlights
+                            const customFields = document.querySelectorAll('[name^="custom_field_"]');
+                            customFields.forEach(field => {
+                                field.value = '';
+                                // Remove rolling hessian highlight if present
+                                field.classList.remove('bg-blue-50', 'border-blue-500');
+                                field.removeAttribute('title');
+                            });
+                            
                             updateDeliveryNoteVisibility();
                             
                         } else {
@@ -2635,6 +2675,16 @@
                             document.getElementById('dnote-closure-confirmation').classList.add('hidden');
                             document.getElementById('barcode-input').value = '';
                             document.getElementById('barcode-input').focus();
+                            
+                            // Clear custom fields and reset highlights
+                            const customFields = document.querySelectorAll('[name^="custom_field_"]');
+                            customFields.forEach(field => {
+                                field.value = '';
+                                // Remove rolling hessian highlight if present
+                                field.classList.remove('bg-blue-50', 'border-blue-500');
+                                field.removeAttribute('title');
+                            });
+                            
                             updateDeliveryNoteVisibility();
                             
                         } else {

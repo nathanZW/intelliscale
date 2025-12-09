@@ -247,6 +247,19 @@
                     <p class="mt-1 text-xs text-zinc-500">Enable Code 39 Mod 43 checksum validation for barcodes.</p>
                 </div>
 
+                <!-- Rolling Hessian -->
+                <div>
+                    <label for="{{ form.rolling_hessian.id_for_label }}"
+                        class="block text-sm font-medium text-zinc-700">Rolling Hessian</label>
+                    <div class="mt-1">
+                        {{ form.rolling_hessian }}
+                    </div>
+                    {% if form.rolling_hessian.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.rolling_hessian.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">If enabled, pre-populates the hessian value from the previous weighing record for the same delivery note.</p>
+                </div>
+
                 <!-- Status -->
                 <div>
                     <div class="flex items-center mt-1">

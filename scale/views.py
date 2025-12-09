@@ -771,10 +771,25 @@ def weighing_station(request):
     process_allow_bale_insert = {}
     process_allow_spaces_in_barcode = {}
     process_use_code39_mod43_validation = {}
+    process_rolling_hessian_config = {}
     for process in processes:
         process_allow_bale_insert[process.id] = process.allow_bale_insert
         process_allow_spaces_in_barcode[process.id] = process.allow_spaces_in_barcode
         process_use_code39_mod43_validation[process.id] = process.use_code39_mod43_validation
+        process_rolling_hessian_config[process.id] = process.rolling_hessian
+
+    # Rolling Hessian Logic
+    prefilled_hessian_value = ''
+    if active_process and active_process.rolling_hessian and active_delivery_note:
+        # Get the latest weighing record for this delivery note
+        last_record = WeighingRecord.objects.filter(
+            delivery_note=active_delivery_note
+        ).order_by('-timestamp').first()
+        
+        if last_record and last_record.custom_data:
+            # Check for 'hessian_id'
+            if 'hessian_id' in last_record.custom_data:
+                prefilled_hessian_value = last_record.custom_data['hessian_id']
     
     context = {
         'scales': scales,
@@ -789,10 +804,12 @@ def weighing_station(request):
         'process_allow_bale_insert': json.dumps(process_allow_bale_insert),
         'process_allow_spaces_in_barcode': json.dumps(process_allow_spaces_in_barcode),
         'process_use_code39_mod43_validation': json.dumps(process_use_code39_mod43_validation),
+        'process_rolling_hessian_config': json.dumps(process_rolling_hessian_config),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
         'active_delivery_note': active_delivery_note,
-        'product_tare_weights': json.dumps(product_tare_weights)
+        'product_tare_weights': json.dumps(product_tare_weights),
+        'prefilled_hessian_value': prefilled_hessian_value,
     }
     
     return render(request, 'scale/weighing_station.html', context)
