@@ -3,7 +3,7 @@
 {% block title %}Printing Note Details | IntelliScale{% endblock %}
 
 {% block content %}
-<div>
+<div class="print:hidden">
     <div class="mb-6">
         <div class="flex items-center">
             <a href="{% url 'scale:printing_note_list' %}" class="mr-4 text-zinc-500 hover:text-zinc-700">
@@ -90,6 +90,63 @@
             <p class="mt-1 text-sm text-zinc-500">This note has no scanned items yet.</p>
         </div>
         {% endif %}
+    </div>
+</div>
+    </div>
+</div>
+
+<!-- Dedicated Print Layout -->
+<div class="hidden print:block p-8 bg-white text-black font-sans">
+    <!-- Date -->
+    <div class="mb-6">
+        <p class="text-lg font-bold">Date: {% now "Y-m-d" %}</p>
+    </div>
+
+    <!-- Grower Info -->
+    <div class="mb-6 space-y-1">
+        <p class="text-xl font-bold">Grower Number: {{ note.grower_number }}</p>
+        <p class="text-xl uppercase">{{ note.first_name }} {{ note.last_name }}</p>
+    </div>
+
+    <!-- Totals -->
+    <div class="mb-8 border-t-2 border-b-2 border-black py-4">
+        <div class="grid grid-cols-2 gap-8 max-w-lg">
+             <div>
+                <p class="text-sm uppercase text-gray-600">Total Gross Mass</p>
+                <p class="text-2xl font-bold">{{ note.get_total_gross_weight|floatformat:2 }} kg</p>
+             </div>
+             <div>
+                <p class="text-sm uppercase text-gray-600">Total Net Mass</p>
+                <p class="text-2xl font-bold">{{ note.get_total_net_weight|floatformat:2 }} kg</p>
+             </div>
+        </div>
+    </div>
+
+    <!-- Bales List -->
+    <div>
+        <h3 class="font-bold text-lg mb-4 uppercase border-b border-black inline-block">Bale Details</h3>
+        <table class="w-full text-left border-collapse text-sm">
+            <thead>
+                <tr class="border-b-2 border-black">
+                    <th class="py-2 font-bold">#</th>
+                    <th class="py-2 font-bold">Barcode</th>
+                    <th class="py-2 font-bold text-right">Gross (kg)</th>
+                    <th class="py-2 font-bold text-right">Tare (kg)</th>
+                    <th class="py-2 font-bold text-right">Net (kg)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in note.records.all %}
+                <tr class="border-b border-gray-300">
+                    <td class="py-2 text-gray-500">{{ forloop.counter }}</td>
+                    <td class="py-2 font-mono">{{ record.barcode }}</td>
+                    <td class="py-2 text-right">{{ record.gross_weight }}</td>
+                    <td class="py-2 text-right">{{ record.tare_weight }}</td>
+                    <td class="py-2 text-right font-bold">{{ record.net_weight }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}
