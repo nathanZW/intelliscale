@@ -436,6 +436,22 @@
         // Create lookup for product tare weights
         const productTareWeights = {{ product_tare_weights|safe }};
 
+        // Helper to update tare display based on current product
+        function updateTareDisplay() {
+            const productId = document.getElementById('product-id-input').value;
+            let productTare = 0;
+            if (productId && productTareWeights[productId]) {
+                productTare = parseFloat(productTareWeights[productId]);
+            }
+            if (tareWeightInput) {
+                tareWeightInput.value = productTare.toFixed(2);
+            }
+            return productTare;
+        }
+
+        // Initialize tare display immediately
+        updateTareDisplay();
+
         // Get Weight Function
         function getWeight() {
             const scaleId = $(scaleSelect).val();
@@ -454,17 +470,8 @@
                         grossWeightInput.value = weight.toFixed(2);
                         
                         // Calculate Net
-                        // Get current product ID
-                        const productId = document.getElementById('product-id-input').value;
-                        
-                        // Get tare weight for product
-                        let productTare = 0;
-                        if (productId && productTareWeights[productId]) {
-                            productTare = parseFloat(productTareWeights[productId]);
-                        }
-                        
-                        // Update tare input display
-                        tareWeightInput.value = productTare.toFixed(2);
+                        // Get tare weight (using helper or direct lookup)
+                        const productTare = updateTareDisplay();
                         
                         // Calculate net
                         const net = weight - productTare;
