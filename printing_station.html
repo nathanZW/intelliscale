@@ -1,0 +1,22 @@
+1.
+To accomodate upcoming feature we need a new station, modeled after weighing_station
+This new station, called printing station will have much the same functionality
+
+it will
+- interact with scales and pull weight
+- scan barcodes and create a record with mass
+- show an active note on the right side displaying the barcodes along with their mass that have been scanned
+
+it will not
+- interact with any erp or odoo, it will be completely local
+- so there will be no update-mass or create-commercial-bale request, everything is local
+- open delivery notes pulled from odoo
+- save it's records to the same model that the normal weighing station does, it must be self contained
+
+
+2.The user will create a note (not a delivery note) in the station where they will be able to enter a value for 'Grower
+Number, First Name, Last Name' and the date will be automatically prefilled, much like a delivery note once it's active
+associated 'weighing records' can be associated with it.
+after scanning is complete the user wants to be able to print a report showing the details of what they scanned (The
+Grower Number, First Name, Last Name, each barcode and it's weight, the total mass). this is the goal of the printing
+station.

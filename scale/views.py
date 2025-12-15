@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.http import HttpResponseForbidden, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from users.views import is_admin 
-from .models import Scale, WeighingProcess, Product, DeliveryNote, WeighingRecord, CompanySettings, Driver, Truck, Trailer, ScaleIdHistory
+from .models import Scale, WeighingProcess, Product, DeliveryNote, WeighingRecord, CompanySettings, Driver, Truck, Trailer, ScaleIdHistory, PrintingNote, PrintingRecord
 from .forms import ScaleForm, WeighingProcessForm, ProductForm, DeliveryNoteForm, CompanySettingsForm, DriverForm, TruckForm, TrailerForm
 import serial
 import serial.tools.list_ports
@@ -1582,9 +1582,10 @@ def recall_delivery_note(request, pk):
                 from django.db import transaction # Added this import for transaction.atomic
                 with transaction.atomic():
                     WeighingRecord.objects.filter(delivery_note=delivery_note).delete()
-                    # Reset scanned count and other local stats if needed
-                    # The requirement says "wipes the bales weight in odoo and changes the delivery note state to 'checked'"
-                    # We should probably clear the scanned list locally too if we track it
+                    # Reset scanned count and other local stats
+                    delivery_note.scanned_barcodes = []
+                    delivery_note.scanned_bales_count = 0
+                    delivery_note.save()
                     
                 messages.success(request, "Delivery note recalled successfully. Weighing records have been deleted.")
             else:
@@ -2934,7 +2935,7 @@ def find_delivery_note_by_barcode(request):
                         # But only if the delivery note is currently being scanned
                         if not dnote.is_being_scanned:
                             return JsonResponse({
-                                'success': False, 
+                                'success': False,
                                 'message': f'Delivery note {dnote.delivery_note_number} is already complete'
                             })
                     elif dnote.is_scanning_complete():
@@ -3368,3 +3369,121 @@ def delivery_note_create_ajax(request):
             'success': False,
             'message': f'Error creating delivery note: {str(e)}'
         })
+
+@login_required
+def printing_station(request):
+    """
+    View for the local printing station.
+    - Handles scale interaction (via existing endpoints)
+    - Manages PrintingNotes and PrintingRecords
+    - purely local, no ERP/Odoo interaction
+    """
+    if request.method == 'POST':
+        # Handle form submission
+        printing_note_id = request.POST.get('printing_note_id')
+        grower_number = request.POST.get('grower_number')
+        first_name = request.POST.get('first_name')
+        last_name = request.POST.get('last_name')
+        
+        # Scale/Record Data
+        scale_id = request.POST.get('scale_id')
+        product_id = request.POST.get('product_id')
+        barcode = request.POST.get('barcode', '').strip()
+        gross_weight = request.POST.get('gross_weight') or 0
+        tare_weight = request.POST.get('tare_weight') or 0
+        net_weight = request.POST.get('net_weight') or 0
+        
+        # Find or Create Note
+        printing_note = None
+        if printing_note_id:
+            try:
+                printing_note = PrintingNote.objects.get(id=printing_note_id, user=request.user)
+            except PrintingNote.DoesNotExist:
+                pass # Should not happen unless tampering or new session
+        
+        if not printing_note:
+            # Create new note
+            printing_note = PrintingNote.objects.create(
+                user=request.user,
+                grower_number=grower_number,
+                first_name=first_name,
+                last_name=last_name
+            )
+        else:
+            # Maybe update grower info if changed? 
+            # Requirements didn't specify, but usually user might correct a name.
+            # Let's update it.
+            if grower_number: printing_note.grower_number = grower_number
+            if first_name: printing_note.first_name = first_name
+            if last_name: printing_note.last_name = last_name
+            printing_note.save() # Updates updated_at
+            
+        # Create Record
+        product = None
+        if product_id:
+            try:
+                product = Product.objects.get(id=product_id)
+            except Product.DoesNotExist:
+                pass
+                
+        PrintingRecord.objects.create(
+            printing_note=printing_note,
+            scale_id=scale_id,
+            product=product,
+            barcode=barcode,
+            gross_weight=gross_weight,
+            tare_weight=tare_weight,
+            net_weight=net_weight,
+            unit_of_measure='kg' # Default for now
+        )
+        
+        messages.success(request, f"Recorded {barcode} ({net_weight} kg)")
+        return redirect('scale:printing_station')
+
+    else:
+        # GET Request
+        new_session = request.GET.get('new_session')
+        printing_note = None
+        
+        if new_session == 'true':
+            # Intentional new session, printing_note stays None (blank form)
+            pass
+        else:
+            # Try to resume latest active note
+            printing_note = PrintingNote.objects.filter(user=request.user).order_by('-updated_at').first()
+            # Optional: Filter by 'today' to avoid resuming very old notes? 
+            # For now, let's keep it simple: resume latest. 
+            
+        # Create a dictionary of product tare weights for the template
+        product_tare_weights = {}
+        processed_products = Product.objects.filter(is_active=True)
+        for product in processed_products:
+            product_tare_weights[product.id] = float(product.tare_weight or 0)
+
+        context = {
+            'scales': Scale.objects.filter(is_active=True),
+            'products': processed_products,
+            'printing_note': printing_note,
+            'product_tare_weights': product_tare_weights
+            # Pass today's date for display if needed
+        }
+        return render(request, 'scale/printing_station.html', context)
+
+@login_required
+def printing_note_list(request):
+    """
+    List all printing notes.
+    """
+    notes_list = PrintingNote.objects.all().order_by('-created_at')
+    paginator = Paginator(notes_list, 20) # Show 20 notes per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    return render(request, 'scale/printing_note_list.html', {'page_obj': page_obj})
+
+@login_required
+def printing_note_detail(request, pk):
+    """
+    Detail view for a printing note.
+    """
+    note = get_object_or_404(PrintingNote, pk=pk)
+    return render(request, 'scale/printing_note_detail.html', {'note': note})

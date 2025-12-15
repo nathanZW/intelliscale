@@ -63,6 +63,9 @@ urlpatterns = [
     
     # Weighing Station URLs
     path('weighing-station/', views.weighing_station, name='weighing_station'),
+    path('printing-station/', views.printing_station, name='printing_station'),
+    path('printing-station/notes/', views.printing_note_list, name='printing_note_list'),
+    path('printing-station/notes/<int:pk>/', views.printing_note_detail, name='printing_note_detail'),
     path('weighing-station/recall-update-bale/', views.recall_and_update_bale, name='recall_and_update_bale'),
     path('scales/<int:scale_id>/get-weight/', views.get_weight, name='get_weight'),
     path('weighing-records/sync-all-unsynced/', views.sync_all_unsynced, name='sync_all_unsynced'),

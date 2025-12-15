@@ -1,0 +1,95 @@
+{% extends "scale/base.html" %}
+
+{% block title %}Printing Note Details | IntelliScale{% endblock %}
+
+{% block content %}
+<div>
+    <div class="mb-6">
+        <div class="flex items-center">
+            <a href="{% url 'scale:printing_note_list' %}" class="mr-4 text-zinc-500 hover:text-zinc-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                </svg>
+            </a>
+            <h1 class="text-2xl font-semibold text-zinc-900">Printing Note #{{ note.id }}</h1>
+        </div>
+    </div>
+
+    <!-- Note Details -->
+    <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200 mb-6">
+        <div class="px-6 py-4 border-b border-zinc-200">
+            <h2 class="text-lg font-medium text-zinc-900">Note Information</h2>
+        </div>
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="text-sm font-medium text-zinc-500 mb-2">Grower Number</h3>
+                <p class="text-base font-medium text-zinc-900">{{ note.grower_number }}</p>
+            </div>
+            <div>
+                <h3 class="text-sm font-medium text-zinc-500 mb-2">Grower Name</h3>
+                <p class="text-base font-medium text-zinc-900">{{ note.first_name }} {{ note.last_name }}</p>
+            </div>
+            <div>
+                <h3 class="text-sm font-medium text-zinc-500 mb-2">Created At</h3>
+                <p class="text-base font-medium text-zinc-900">{{ note.created_at|date:"M d, Y H:i" }}</p>
+            </div>
+            <div>
+                <h3 class="text-sm font-medium text-zinc-500 mb-2">Updated At</h3>
+                <p class="text-base font-medium text-zinc-900">{{ note.updated_at|date:"M d, Y H:i" }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Associated Records -->
+    <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+        <div class="px-6 py-4 border-b border-zinc-200 flex justify-between items-center">
+            <h2 class="text-lg font-medium text-zinc-900">Scanned Items</h2>
+            <button onclick="window.print()" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-8 px-3 py-2">
+                <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                </svg>
+                Print Report
+            </button>
+        </div>
+        
+        {% if note.records.all %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-zinc-200">
+                <thead class="bg-zinc-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Barcode</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Product</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Scale</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Gross</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Tare</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Net</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-zinc-200">
+                    {% for record in note.records.all %}
+                    <tr class="hover:bg-zinc-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900">{{ record.barcode }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.product.name|default:"-" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.scale_id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.gross_weight }} {{ record.unit_of_measure }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.tare_weight }} {{ record.unit_of_measure }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900">{{ record.net_weight }} {{ record.unit_of_measure }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.timestamp|date:"M d, Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="px-6 py-12 text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-zinc-900">No items scanned</h3>
+            <p class="mt-1 text-sm text-zinc-500">This note has no scanned items yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -45,6 +45,8 @@
                         <a href="{% url 'scale:product_list' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if 'product' in request.resolver_match.url_name %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Products</a>
                         <a href="{% url 'scale:scale_list' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if 'scale' in request.resolver_match.url_name and 'weighing' not in request.resolver_match.url_name %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Scales</a>
                         <a href="{% url 'scale:weighing_record_list' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if 'weighing_record' in request.resolver_match.url_name %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Weighing Records</a>
+                        <a href="{% url 'scale:printing_station' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'printing_station' %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Printing Station</a>
+                        <a href="{% url 'scale:printing_note_list' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if 'printing_note' in request.resolver_match.url_name %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Printing Notes</a>
                     </nav>
                 </div>
                 
@@ -95,6 +97,8 @@
                     <a href="{% url 'scale:scale_list' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if 'scale' in request.resolver_match.url_name and 'weighing' not in request.resolver_match.url_name %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Scales</a>
                 
                     <a href="{% url 'scale:weighing_record_list' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if 'weighing_record' in request.resolver_match.url_name %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Weighing Records</a>
+                    <a href="{% url 'scale:printing_station' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'printing_station' %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Printing Station</a>
+                    <a href="{% url 'scale:printing_note_list' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if 'printing_note' in request.resolver_match.url_name %}text-zinc-900 bg-zinc-100{% else %}text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50{% endif %}">Printing Notes</a>
                 </div>
                 <div class="pt-4 pb-3 border-t border-zinc-200">
                     <div class="flex items-center px-5">
