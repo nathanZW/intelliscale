@@ -3418,6 +3418,9 @@ def printing_station(request):
             if last_name: printing_note.last_name = last_name
             printing_note.save() # Updates updated_at
             
+        # Update Session with Active Note ID
+        request.session['active_printing_note_id'] = printing_note.id
+            
         # Create Record
         product = None
         if product_id:
@@ -3446,13 +3449,18 @@ def printing_station(request):
         printing_note = None
         
         if new_session == 'true':
-            # Intentional new session, printing_note stays None (blank form)
-            pass
+            # Intentional new session, clear active note in session
+            if 'active_printing_note_id' in request.session:
+                del request.session['active_printing_note_id']
         else:
-            # Try to resume latest active note
-            printing_note = PrintingNote.objects.filter(user=request.user).order_by('-updated_at').first()
-            # Optional: Filter by 'today' to avoid resuming very old notes? 
-            # For now, let's keep it simple: resume latest. 
+            # Try to resume from session
+            active_note_id = request.session.get('active_printing_note_id')
+            if active_note_id:
+                try:
+                    printing_note = PrintingNote.objects.get(id=active_note_id, user=request.user)
+                except PrintingNote.DoesNotExist:
+                    # Session ID invalid (maybe deleted), clear it
+                    del request.session['active_printing_note_id']
             
         # Create a dictionary of product tare weights for the template
         product_tare_weights = {}
