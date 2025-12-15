@@ -372,7 +372,10 @@
 
     <!-- Grower Info -->
     <div class="mb-6 space-y-1">
-        <p class="text-xl font-bold">Grower Number: {{ printing_note.grower_number }}</p>
+        <div class="flex justify-between items-center">
+            <p class="text-xl font-bold">Grower Number: {{ printing_note.grower_number }}</p>
+            <p class="text-xl font-bold">Note ID: {{ printing_note.id }}</p>
+        </div>
         <p class="text-xl uppercase">{{ printing_note.first_name }} {{ printing_note.last_name }}</p>
     </div>
 
