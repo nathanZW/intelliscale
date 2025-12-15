@@ -3487,3 +3487,15 @@ def printing_note_detail(request, pk):
     """
     note = get_object_or_404(PrintingNote, pk=pk)
     return render(request, 'scale/printing_note_detail.html', {'note': note})
+
+@login_required
+def printing_record_delete(request, pk):
+    record = get_object_or_404(PrintingRecord, pk=pk)
+    note_id = record.printing_note.id
+    
+    if request.method == 'POST':
+        barcode = record.barcode
+        record.delete()
+        messages.success(request, f'Record for barcode {barcode} deleted successfully.')
+    
+    return redirect('scale:printing_note_detail', pk=note_id)
