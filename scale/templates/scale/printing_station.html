@@ -286,7 +286,7 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-zinc-700 mb-1">Date</label>
-                            <div class="py-2 px-3 bg-zinc-100 rounded text-zinc-900" id="current-date">{% now "Y-m-d" %}</div>
+                            <div class="py-2 px-3 bg-zinc-100 rounded text-zinc-900" id="current-date">{% now "Y-m-d H:i" %}</div>
                         </div>
                     </div>
 
@@ -367,7 +367,7 @@
 <div class="hidden print:block p-8 bg-white text-black font-sans">
     <!-- Date -->
     <div class="mb-6">
-        <p class="text-lg font-bold">Date: {% now "Y-m-d" %}</p>
+        <p class="text-lg font-bold">Date: {% now "Y-m-d H:i" %}</p>
     </div>
 
     <!-- Grower Info -->
