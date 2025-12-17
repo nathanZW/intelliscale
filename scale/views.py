@@ -369,9 +369,17 @@ def weighing_station(request):
     min_weight = None
     max_weight = None
     allow_manual_entry = False
+    active_process = None
+    weight_rounding = 2
+    
     if processes.exists():
         # Get from the first process (or you could use specific logic to choose which process)
         active_process = processes.first()
+    else:
+        # Default to weighbridge if no active process found
+        active_process = WeighingProcess.objects.filter(process_type='WeighBridge').first()
+
+    if active_process:
         min_weight = active_process.min_weight
         max_weight = active_process.max_weight
         allow_manual_entry = active_process.allow_manual_entry
@@ -747,7 +755,7 @@ def weighing_station(request):
         
         # Determine the appropriate bale count to display based on the active process
         # If there are processes and the first one allows bale insert, use delivered bale count
-        active_process = processes.first() if processes.exists() else None
+        # active_process is already determined at the start of the view
         if active_process and active_process.allow_bale_insert:
             # When bale insert is allowed, use the delivered bale count instead of the original total
             active_delivery_note.display_bale_count = active_delivery_note.get_bale_count_delivered()
