@@ -612,11 +612,16 @@
     // --- Barcode Validation Logic ---
     document.addEventListener('DOMContentLoaded', function() {
         const validateToggle = document.getElementById('validate-barcodes-toggle');
-        let isValidationEnabled = false;
+        // Load state from localStorage, default to false
+        let isValidationEnabled = localStorage.getItem('printingStationValidateBarcodes') === 'true';
 
         if (validateToggle) {
+            // Set initial state
+            validateToggle.checked = isValidationEnabled;
+
             validateToggle.addEventListener('change', function() {
                 isValidationEnabled = this.checked;
+                localStorage.setItem('printingStationValidateBarcodes', isValidationEnabled);
             });
         }
 
