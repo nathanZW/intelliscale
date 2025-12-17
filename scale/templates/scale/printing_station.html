@@ -57,6 +57,15 @@
                                 <span id="header-net-unit" class="ml-1 text-sm text-zinc-500">kg</span>
                             </div>
                         </div>
+                        <!-- Barcode Validation Toggle -->
+                        <div class="flex items-center mr-4">
+                            <label class="inline-flex items-center cursor-pointer">
+                                <span class="mr-3 text-sm font-medium text-gray-900">Validate Barcodes</span>
+                                <input type="checkbox" id="validate-barcodes-toggle" class="sr-only peer">
+                                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+
                         <button id="get-weight-btn" type="button" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-10 px-4 py-2">
                             Get Weight
                         </button>
@@ -598,6 +607,62 @@
             window.print(); 
         });
 
+    });
+    
+    // --- Barcode Validation Logic ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const validateToggle = document.getElementById('validate-barcodes-toggle');
+        let isValidationEnabled = false;
+
+        if (validateToggle) {
+            validateToggle.addEventListener('change', function() {
+                isValidationEnabled = this.checked;
+            });
+        }
+
+        // Code 39 Mod 43 Validation Function
+        function validateCode39Mod43(barcode) {
+            if (!barcode || barcode.length < 1) return false;
+
+            // The last character is the checksum
+            const inputChecksum = barcode.slice(-1);
+            const data = barcode.slice(0, -1);
+
+            const charSet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+            let total = 0;
+
+            for (let i = 0; i < data.length; i++) {
+                const char = data[i];
+                const value = charSet.indexOf(char);
+                if (value === -1) {
+                    // Invalid character found
+                    return false;
+                }
+                total += value;
+            }
+
+            const remainder = total % 43;
+            // Remainder maps to char in charSet
+            const calculatedChecksum = charSet[remainder];
+
+            return inputChecksum === calculatedChecksum;
+        }
+
+        // Intercept Form Submission
+        $('#printing-form').on('submit', function(e) {
+            if (isValidationEnabled) {
+                const barcode = $('#barcode-input').val();
+                
+                // Only validate if there is a barcode
+                if (barcode && barcode.trim().length > 0) {
+                     if (!validateCode39Mod43(barcode)) {
+                        e.preventDefault();
+                        alert('Invalid Code 39 Barcode. Please check the barcode.');
+                        return false;
+                    }
+                }
+            }
+        });
     });
 </script>
 {% endblock %}
