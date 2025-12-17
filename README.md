@@ -1,6 +1,6 @@
 # Intelliscale
 ### The iterative branch full of the latest improvements
-## Getting started
+## Get started
 ### Linux
 Run the following Script to get set up
 [intelliscale_setup.sh](https://github.com/user-attachments/files/24192227/intelliscale_setup.sh)
@@ -34,3 +34,8 @@ sudo systemctl daemon-reload
 Intelliscale offers limited functionality on Windows
 
 Clone the repository and run the .bat file for basic functionality
+
+## Get Set up
+Check with Support, there may already be a configuration file available for you
+
+Configuration files can Imported and exported freely by an Admin. The option is available from the Admin Dashboard
