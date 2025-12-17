@@ -44,6 +44,7 @@
                         <a href="{% url 'scale:product_list' %}" class="px-3 py-2 rounded-md text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Products</a>
                         <a href="{% url 'scale:scale_list' %}" class="px-3 py-2 rounded-md text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Scales</a>
                         <a href="{% url 'scale:company_settings' %}" class="px-3 py-2 rounded-md text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Company</a>
+                        <a href="{% url 'scale:config_import_export' %}" class="px-3 py-2 rounded-md text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Configuration</a>
                     </nav>
                 </div>
                 
@@ -93,6 +94,7 @@
                     <a href="{% url 'scale:product_list' %}" class="block px-3 py-2 rounded-md text-base font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Products</a>
                     <a href="{% url 'scale:scale_list' %}" class="block px-3 py-2 rounded-md text-base font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Scales</a>
                     <a href="{% url 'scale:company_settings' %}" class="block px-3 py-2 rounded-md text-base font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Company</a>
+                    <a href="{% url 'scale:config_import_export' %}" class="block px-3 py-2 rounded-md text-base font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Configuration</a>
                 </div>
                 <div class="pt-4 pb-3 border-t border-zinc-200">
                     <div class="flex items-center px-5">
@@ -213,6 +215,17 @@
                     <p class="text-zinc-600 mb-8">Start a weighing session.</p>
                     <a href="{% url 'scale:weighing_station' %}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 w-full">
                         Weighing Station
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Configuration Management Card -->
+            <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+                <div class="p-6">
+                    <h2 class="text-xl font-semibold text-zinc-900 mb-2">Configuration</h2>
+                    <p class="text-zinc-600 mb-8">Import and export system configuration.</p>
+                    <a href="{% url 'scale:config_import_export' %}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 w-full">
+                        Manage Configuration
                     </a>
                 </div>
             </div>
