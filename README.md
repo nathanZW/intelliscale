@@ -2,8 +2,11 @@
 ### The iterative branch full of the latest improvements
 ## Get started
 ### Linux
-Run the following Script to get started
-[intelliscale_setup.sh](https://github.com/user-attachments/files/24207050/intelliscale_setup.sh)
+Run the following script to get started 
+[intelliscale_setup.sh](https://github.com/user-attachments/files/24448348/intelliscale_setup.sh)
+
+Should you need to remove the program use the following 
+[cleanup_intelliscale.sh](https://github.com/user-attachments/files/24448387/cleanup_intelliscale.sh)
 
 This will configure Intelliscale to run on boot
 To access intelliscale using a Host name some configuration is needed
