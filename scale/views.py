@@ -3671,3 +3671,100 @@ def printing_record_delete(request, pk):
         messages.success(request, f'Record for barcode {barcode} deleted successfully.')
     
     return redirect('scale:printing_note_detail', pk=note_id)
+
+@login_required
+def printing_note_export_xlsx(request, pk):
+    import openpyxl
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from django.http import HttpResponse
+
+    note = get_object_or_404(PrintingNote, pk=pk)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f"Printing_Note_{note.id}_{note.created_at.strftime('%Y%m%d')}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Note {note.id}"
+
+    # Styles
+    header_font = Font(bold=True, size=12)
+    title_font = Font(bold=True, size=14)
+    center_align = Alignment(horizontal='center', vertical='center')
+    left_align = Alignment(horizontal='left', vertical='center')
+    right_align = Alignment(horizontal='right', vertical='center')
+    
+    thin_border = Border(left=Side(style='thin'), 
+                         right=Side(style='thin'), 
+                         top=Side(style='thin'), 
+                         bottom=Side(style='thin'))
+
+    # Note Information
+    ws['A1'] = "Printing Note Details"
+    ws['A1'].font = title_font
+    ws.merge_cells('A1:F1')
+    ws['A1'].alignment = center_align
+
+    # Metadata rows
+    metadata = [
+        ("Note ID:", str(note.id)),
+        ("Grower Number:", note.grower_number),
+        ("Grower Name:", f"{note.first_name} {note.last_name}"),
+        ("Created At:", note.created_at.strftime('%Y-%m-%d %H:%M')),
+        ("Total Gross:", f"{note.get_total_gross_weight()} kg"),
+        ("Total Net:", f"{note.get_total_net_weight()} kg"),
+    ]
+
+    row_num = 3
+    for label, value in metadata:
+        ws.cell(row=row_num, column=1, value=label).font = Font(bold=True)
+        ws.cell(row=row_num, column=2, value=value)
+        row_num += 1
+
+    row_num += 2  # Gap
+
+    # Table Headers
+    headers = ['Barcode', 'Product', 'Scale', 'Gross', 'Tare', 'Net', 'Timestamp']
+    ws.append([]) # Empty row space if needed or just set start row
+    
+    # Reset row_num for table
+    table_start_row = row_num
+    
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=table_start_row, column=col_idx, value=header)
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        # simple gray fill
+        cell.fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
+
+    # Table Data
+    row_num = table_start_row + 1
+    for record in note.records.all():
+        data = [
+            record.barcode,
+            record.product.name if record.product else "-",
+            record.scale_id,
+            f"{record.gross_weight} {record.unit_of_measure}",
+            f"{record.tare_weight} {record.unit_of_measure}",
+            f"{record.net_weight} {record.unit_of_measure}",
+            record.timestamp.strftime('%Y-%m-%d %H:%M')
+        ]
+        
+        for col_idx, value in enumerate(data, 1):
+            cell = ws.cell(row=row_num, column=col_idx, value=value)
+            cell.alignment = left_align
+            cell.border = thin_border
+            if col_idx in [4, 5, 6]: # Weight columns
+                cell.alignment = right_align
+        
+        row_num += 1
+
+    # Adjust column widths
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 20
+
+    wb.save(response)
+    return response
