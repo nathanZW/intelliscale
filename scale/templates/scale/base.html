@@ -23,7 +23,7 @@
 </head>
 <body class="bg-zinc-50 min-h-screen">
     <!-- Modern Header -->
-    <header class="bg-white border-b border-zinc-200 sticky top-0 z-30">
+    <header class="bg-white border-b border-zinc-200 sticky top-0 z-30 print:hidden">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <!-- Logo and Brand -->
@@ -127,7 +127,7 @@
 
     <main class="w-11/12 mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {% if messages %}
-            <div class="mb-6">
+            <div class="mb-6 print:hidden">
                 {% for message in messages %}
                     <div class="bg-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-50 border border-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-200 text-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-600 text-sm rounded-md p-4 mb-4">
                         {{ message }}

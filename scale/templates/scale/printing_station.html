@@ -373,38 +373,38 @@
 
 
 <!-- Dedicated Print Layout -->
-<div class="hidden print:block p-8 bg-white text-black font-sans">
+<div class="hidden print:block p-4 bg-white text-black font-sans">
     <!-- Date -->
-    <div class="mb-6">
-        <p class="text-lg font-bold">Date: {% now "Y-m-d H:i" %}</p>
+    <div class="mb-1">
+        <p class="text-sm font-bold">Date: {% now "Y-m-d H:i" %}</p>
     </div>
 
     <!-- Grower Info -->
-    <div class="mb-6 space-y-1">
+    <div class="mb-1 space-y-0">
         <div class="flex justify-between items-center">
-            <p class="text-xl font-bold">Grower Number: {{ printing_note.grower_number }}</p>
-            <p class="text-xl font-bold">Note ID: {{ printing_note.id }}</p>
+            <p class="text-base font-bold">Grower Number: {{ printing_note.grower_number }}</p>
+            <p class="text-base font-bold">Note ID: {{ printing_note.id }}</p>
         </div>
-        <p class="text-xl uppercase">{{ printing_note.first_name }} {{ printing_note.last_name }}</p>
+        <p class="text-base uppercase">{{ printing_note.first_name }} {{ printing_note.last_name }}</p>
     </div>
 
     <!-- Totals -->
-    <div class="mb-8 border-t-2 border-b-2 border-black py-4">
+    <div class="mb-1 border-t border-b border-black py-1">
         <div class="grid grid-cols-2 gap-8 max-w-lg">
              <div>
-                <p class="text-sm uppercase text-gray-600">Total Gross Mass</p>
-                <p class="text-2xl font-bold">{{ printing_note.get_total_gross_weight|floatformat:2 }} kg</p>
+                <p class="text-xs uppercase text-gray-600">Total Gross Mass</p>
+                <p class="text-lg font-bold">{{ printing_note.get_total_gross_weight|floatformat:2 }} kg</p>
              </div>
              <div>
-                <p class="text-sm uppercase text-gray-600">Total Net Mass</p>
-                <p class="text-2xl font-bold">{{ printing_note.get_total_net_weight|floatformat:2 }} kg</p>
+                <p class="text-xs uppercase text-gray-600">Total Net Mass</p>
+                <p class="text-lg font-bold">{{ printing_note.get_total_net_weight|floatformat:2 }} kg</p>
              </div>
         </div>
     </div>
 
     <!-- Bales List -->
     <div>
-        <h3 class="font-bold text-lg mb-4 uppercase border-b border-black inline-block">Bale Details</h3>
+        <h3 class="font-bold text-base mb-1 uppercase border-b border-black inline-block">Bale Details</h3>
         <table class="w-full text-left border-collapse text-sm">
             <thead>
                 <tr class="border-b-2 border-black">
