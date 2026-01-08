@@ -3593,6 +3593,11 @@ def printing_station(request):
             except Product.DoesNotExist:
                 pass
                 
+        # Check if barcode already exists in this note
+        if PrintingRecord.objects.filter(printing_note=printing_note, barcode=barcode).exists():
+            messages.error(request, f"Barcode {barcode} already exists in this note.")
+            return redirect('scale:printing_station')
+
         PrintingRecord.objects.create(
             printing_note=printing_note,
             scale_id=scale_id,
