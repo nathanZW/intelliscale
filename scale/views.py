@@ -3611,9 +3611,17 @@ def printing_station(request):
             messages.error(request, f"Barcode {barcode} already exists in this note.")
             return redirect('scale:printing_station')
 
+        # Look up Scale object to get its scale_id string (e.g., "000087")
+        scale = None
+        if scale_id:
+            try:
+                scale = Scale.objects.get(id=scale_id)
+            except (Scale.DoesNotExist, ValueError):
+                pass
+
         PrintingRecord.objects.create(
             printing_note=printing_note,
-            scale_id=scale_id,
+            scale_id=scale.scale_id if scale else scale_id,
             product=product,
             barcode=barcode,
             gross_weight=gross_weight,
