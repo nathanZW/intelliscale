@@ -680,5 +680,29 @@
             }
         });
     });
+
+    // --- Auto-focus Logic ---
+    // Auto-focus the input when page loads
+    window.addEventListener('load', function() {
+        const barcodeInput = document.getElementById('barcode-input');
+        if (barcodeInput) {
+            barcodeInput.focus();
+        }
+    });
+
+    // Keep focus on the input field (helpful for continuous scanning)
+    document.addEventListener('click', function(event) {
+        if (event.target.tagName !== 'BUTTON' && 
+            event.target.tagName !== 'INPUT' && 
+            event.target.tagName !== 'SELECT' &&
+            event.target.tagName !== 'TEXTAREA') {
+            const barcodeInput = document.getElementById('barcode-input');
+            if (barcodeInput) {
+                if (document.activeElement !== barcodeInput) {
+                    barcodeInput.focus();
+                }
+            }
+        }
+    });
 </script>
 {% endblock %}
