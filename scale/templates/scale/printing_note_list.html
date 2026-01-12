@@ -18,8 +18,34 @@
     </div>
 
     <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
-        <div class="px-6 py-4 border-b border-zinc-200">
-            <h2 class="text-lg font-medium text-zinc-900">All Printing Notes</h2>
+        <div class="px-6 py-4 border-b border-zinc-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <h2 class="text-lg font-medium text-zinc-900 whitespace-nowrap">All Printing Notes</h2>
+            
+            <form method="GET" class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <label for="grower_number" class="text-xs font-medium text-zinc-500 uppercase">Grower #</label>
+                    <input type="text" name="grower_number" id="grower_number" value="{{ request.GET.grower_number }}" placeholder="Search..." class="flex h-9 w-32 rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:cursor-not-allowed disabled:opacity-50">
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <label for="start_date" class="text-xs font-medium text-zinc-500 uppercase">From</label>
+                    <input type="date" name="start_date" id="start_date" value="{{ request.GET.start_date }}" class="flex h-9 w-36 rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950">
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <label for="end_date" class="text-xs font-medium text-zinc-500 uppercase">To</label>
+                    <input type="date" name="end_date" id="end_date" value="{{ request.GET.end_date }}" class="flex h-9 w-36 rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950">
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <button type="submit" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-9 px-4 py-2">
+                        Filter
+                    </button>
+                    {% if request.GET.grower_number or request.GET.start_date or request.GET.end_date %}
+                    <a href="{% url 'scale:printing_note_list' %}" class="text-sm text-zinc-500 hover:text-zinc-700 underline px-2">Clear</a>
+                    {% endif %}
+                </div>
+            </form>
         </div>
         
         {% if page_obj %}

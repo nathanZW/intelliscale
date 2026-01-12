@@ -3673,6 +3673,21 @@ def printing_note_list(request):
     List all printing notes.
     """
     notes_list = PrintingNote.objects.all().order_by('-created_at')
+    
+    # Filtering
+    grower_number = request.GET.get('grower_number')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    if grower_number:
+        notes_list = notes_list.filter(grower_number__icontains=grower_number)
+    
+    if start_date:
+        notes_list = notes_list.filter(created_at__date__gte=start_date)
+        
+    if end_date:
+        notes_list = notes_list.filter(created_at__date__lte=end_date)
+
     paginator = Paginator(notes_list, 20) # Show 20 notes per page
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
