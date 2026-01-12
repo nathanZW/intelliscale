@@ -8,7 +8,8 @@ Run the following script to get started
 Should you need to remove the program use the following 
 [cleanup_intelliscale.sh](https://github.com/user-attachments/files/24448387/cleanup_intelliscale.sh)
 
-This will configure Intelliscale to run on boot
+This will configure Intelliscale to run on boot.
+
 To access intelliscale using a Host name some configuration is needed
 1. Access the hosts file from the terminal
 ```
@@ -39,6 +40,6 @@ Intelliscale offers limited functionality on Windows
 Clone the repository and run the .bat file for basic functionality
 
 ## Get Set up
-Check with Support, there may already be a configuration file available for you
+Check in with Support, there may already be a configuration file available for you
 
-Configuration files can Imported and exported freely by an Admin. The option is available from the Admin Dashboard
+Configuration files can imported and exported freely by an Admin. The option is available from the Admin Dashboard
