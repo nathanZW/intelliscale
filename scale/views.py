@@ -3593,6 +3593,19 @@ def printing_station(request):
             except Product.DoesNotExist:
                 pass
                 
+        if not barcode:
+            messages.error(request, "Barcode cannot be empty.")
+            return redirect('scale:printing_station')
+
+        try:
+            net_weight_float = float(net_weight)
+        except (ValueError, TypeError):
+            net_weight_float = 0
+
+        if net_weight_float <= 0:
+            messages.error(request, "Net weight must be greater than zero.")
+            return redirect('scale:printing_station')
+
         # Check if barcode already exists in this note
         if PrintingRecord.objects.filter(printing_note=printing_note, barcode=barcode).exists():
             messages.error(request, f"Barcode {barcode} already exists in this note.")

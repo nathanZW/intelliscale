@@ -4,6 +4,17 @@
 
 {% block content %}
 <div class="print:hidden">
+    <style>
+        /* Hide spin buttons for tare weight input */
+        #tare-weight::-webkit-outer-spin-button,
+        #tare-weight::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        #tare-weight {
+            -moz-appearance: textfield;
+        }
+    </style>
     <div class="mb-6">
         <h1 class="text-2xl font-semibold text-zinc-900">Printing Station</h1>
         <!-- <p class="mt-2 text-zinc-600">Scan items and print labels locally.</p> -->
@@ -255,7 +266,7 @@
                         <div id="delivery-note-product" class="hidden">
                             <label class="block text-sm font-medium text-zinc-700 mb-1">Product <span class="text-blue-600 text-xs">(from delivery note)</span></label>
                             <div id="delivery-note-product-name" class="py-2 px-3 bg-blue-50 border border-blue-200 rounded text-zinc-900"></div>
-                            <input type="hidden" id="delivery-note-product-id" name="product_id" value="">
+                            <input type="hidden" id="delivery-note-product-id" value="">
                         </div>
                     </div>
                 </div>
