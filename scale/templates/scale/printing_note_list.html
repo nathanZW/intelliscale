@@ -57,6 +57,7 @@
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Grower Number</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Grower Name</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Date Created</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Expected Bales</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Items</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -68,6 +69,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ note.grower_number }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ note.first_name }} {{ note.last_name }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ note.created_at|date:"M d, Y H:i" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ note.expected_bales|default:"-" }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ note.records.count }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
                             <a href="{% url 'scale:printing_note_detail' note.id %}" class="inline-flex items-center justify-center rounded-md text-xs font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-8 px-3 py-2">

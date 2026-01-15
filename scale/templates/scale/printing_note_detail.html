@@ -30,6 +30,10 @@
                 <p class="text-base font-medium text-zinc-900">{{ note.first_name }} {{ note.last_name }}</p>
             </div>
             <div>
+                <h3 class="text-sm font-medium text-zinc-500 mb-2">Expected Bales</h3>
+                <p class="text-base font-medium text-zinc-900">{{ note.expected_bales|default:"-" }}</p>
+            </div>
+            <div>
                 <h3 class="text-sm font-medium text-zinc-500 mb-2">Created At</h3>
                 <p class="text-base font-medium text-zinc-900">{{ note.created_at|date:"M d, Y H:i" }}</p>
             </div>
@@ -142,7 +146,7 @@
 
     <!-- Totals -->
     <div class="mb-8 border-t-2 border-b-2 border-black py-4">
-        <div class="grid grid-cols-2 gap-8 max-w-lg">
+        <div class="grid grid-cols-3 gap-8 max-w-2xl">
              <div>
                 <p class="text-sm uppercase text-gray-600">Total Gross Mass</p>
                 <p class="text-2xl font-bold">{{ note.get_total_gross_weight|floatformat:2 }} kg</p>
@@ -150,6 +154,10 @@
              <div>
                 <p class="text-sm uppercase text-gray-600">Total Net Mass</p>
                 <p class="text-2xl font-bold">{{ note.get_total_net_weight|floatformat:2 }} kg</p>
+             </div>
+             <div>
+                <p class="text-sm uppercase text-gray-600">Expected Bales</p>
+                <p class="text-2xl font-bold">{{ note.expected_bales|default:"-" }}</p>
              </div>
         </div>
     </div>

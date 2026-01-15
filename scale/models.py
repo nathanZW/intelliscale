@@ -460,6 +460,7 @@ class PrintingNote(models.Model):
     grower_number = models.CharField(max_length=100, blank=True)
     first_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
+    expected_bales = models.IntegerField(null=True, blank=True, help_text="Total expected number of barcodes/bales")
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

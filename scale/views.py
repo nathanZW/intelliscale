@@ -3548,6 +3548,7 @@ def printing_station(request):
         grower_number = request.POST.get('grower_number')
         first_name = request.POST.get('first_name')
         last_name = request.POST.get('last_name')
+        total_bales = request.POST.get('expected_bales')
         
         # Scale/Record Data
         scale_id = request.POST.get('scale_id')
@@ -3571,7 +3572,8 @@ def printing_station(request):
                 user=request.user,
                 grower_number=grower_number,
                 first_name=first_name,
-                last_name=last_name
+                last_name=last_name,
+                expected_bales=total_bales if total_bales else None
             )
         else:
             # Maybe update grower info if changed? 
@@ -3580,6 +3582,7 @@ def printing_station(request):
             if grower_number: printing_note.grower_number = grower_number
             if first_name: printing_note.first_name = first_name
             if last_name: printing_note.last_name = last_name
+            if total_bales is not None: printing_note.expected_bales = total_bales if total_bales else None
             printing_note.save() # Updates updated_at
             
         # Update Session with Active Note ID
@@ -3754,6 +3757,7 @@ def printing_note_export_xlsx(request, pk):
         ("Grower Number:", note.grower_number),
         ("Grower Name:", f"{note.first_name} {note.last_name}"),
         ("Created At:", note.created_at.strftime('%Y-%m-%d %H:%M')),
+        ("Expected Bales:", str(note.expected_bales or "-")),
         ("Total Gross:", f"{note.get_total_gross_weight()} kg"),
         ("Total Net:", f"{note.get_total_net_weight()} kg"),
     ]
