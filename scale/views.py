@@ -3720,6 +3720,19 @@ def printing_note_delete(request, pk):
     return redirect('scale:printing_note_list')
 
 @login_required
+def reactivate_printing_note(request, pk):
+    """
+    Reactivate a printing note for editing in the printing station.
+    """
+    note = get_object_or_404(PrintingNote, pk=pk)
+    
+    # Set this note as the active one in the session
+    request.session['active_printing_note_id'] = note.id
+    
+    messages.success(request, f'Printing Note #{note.id} reactivated.')
+    return redirect('scale:printing_station')
+
+@login_required
 def printing_record_delete(request, pk):
     record = get_object_or_404(PrintingRecord, pk=pk)
     note_id = record.printing_note.id
