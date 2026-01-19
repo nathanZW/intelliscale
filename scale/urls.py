@@ -66,6 +66,7 @@ urlpatterns = [
     path('printing-station/', views.printing_station, name='printing_station'),
     path('printing-station/notes/', views.printing_note_list, name='printing_note_list'),
     path('printing-station/notes/<int:pk>/', views.printing_note_detail, name='printing_note_detail'),
+    path('printing-station/notes/<int:pk>/delete/', views.printing_note_delete, name='printing_note_delete'),
     path('printing-station/records/<int:pk>/delete/', views.printing_record_delete, name='printing_record_delete'),
     path('printing-station/notes/<int:pk>/export/', views.printing_note_export_xlsx, name='printing_note_export_xlsx'),
     path('weighing-station/recall-update-bale/', views.recall_and_update_bale, name='recall_and_update_bale'),

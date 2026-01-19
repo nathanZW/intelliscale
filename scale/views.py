@@ -3705,6 +3705,21 @@ def printing_note_detail(request, pk):
     return render(request, 'scale/printing_note_detail.html', {'note': note})
 
 @login_required
+def printing_note_delete(request, pk):
+    """
+    Delete a printing note.
+    """
+    note = get_object_or_404(PrintingNote, pk=pk)
+    
+    if request.method == 'POST':
+        note.delete()
+        messages.success(request, f'Printing note #{pk} deleted successfully.')
+        return redirect('scale:printing_note_list')
+    
+    # If not POST, redirect back to list (though this shouldn't be reached if only used via button)
+    return redirect('scale:printing_note_list')
+
+@login_required
 def printing_record_delete(request, pk):
     record = get_object_or_404(PrintingRecord, pk=pk)
     note_id = record.printing_note.id
