@@ -1,45 +1,58 @@
 # Intelliscale
-### The iterative branch full of the latest improvements
-## Get started
-### Linux
-Run the following script to get started 
-[intelliscale_setup.sh](https://github.com/user-attachments/files/24448348/intelliscale_setup.sh)
+> **The iterative fork with the latest improvements and features.**
 
-Should you need to remove the program use the following 
-[cleanup_intelliscale.sh](https://github.com/user-attachments/files/24448387/cleanup_intelliscale.sh)
+## 🚀 Getting Started
 
-This will configure Intelliscale to run on boot.
+### Linux (Recommended)
+This installation will configure Intelliscale to run automatically on boot.
 
-To access intelliscale using a Host name some configuration is needed
-1. Access the hosts file from the terminal
-```
-sudo nano /etc/hosts
-```
-2. where you see your IP add an entry specifying a new host name like so
-```
-0.0.0.0 localhost
-0.0.0.0 youcomputername
-0.0.0.0 intelliscale.local <--- your new entry
-```
-3. Configure Nginx to serve on the address
-```
-sudo nano /etc/nginx/sites-available/intelliscale
-```
-```
-server_name intelliscale.local 0.0.0.0; <--- replace intelliscale.local with your new host name
-```
-4. Restart Nginx and systemd configurations
-```
-sudo systemctl restart nginx
-sudo systemctl daemon-reload
-```
+1. **Installation:** Download and run the setup script:
+   * [intelliscale_setup.sh](https://github.com/user-attachments/files/24711691/intelliscale_setup.sh)
+2. **Uninstallation:** If you need to remove the program and its configurations:
+   * [cleanup_intelliscale.sh](https://github.com/user-attachments/files/24448387/cleanup_intelliscale.sh)
 
-### Windows
-Intelliscale offers limited functionality on Windows
+---
 
-Clone the repository and run the .bat file for basic functionality
+### 🌐 Custom Hostname Configuration
+To access Intelliscale via a custom hostname (e.g., `http://intelliscale.local`), follow these steps:
 
-## Get Set up
-Check in with Support, there may already be a configuration file available for you
+#### 1. Map the Local IP
+Open your hosts file:
+`sudo nano /etc/hosts`
 
-Configuration files can imported and exported freely by an Admin. The option is available from the Admin Dashboard
+Add your entry at the bottom:
+`127.0.0.1   localhost`
+`127.0.0.1   yourcomputername`
+`127.0.0.1   intelliscale.local  # <--- Your new entry`
+
+#### 2. Configure Nginx
+Edit the Nginx site configuration:
+`sudo nano /etc/nginx/sites-available/intelliscale`
+
+Update the `server_name` line:
+`server_name intelliscale.local; # <--- Replace with your chosen hostname`
+
+#### 3. Apply Changes
+Restart the services to finalize the setup:
+`sudo systemctl daemon-reload`
+`sudo systemctl restart nginx`
+
+---
+
+### 🪟 Windows
+*Note: Intelliscale offers limited functionality on Windows environments.*
+
+1. Clone the repository to your local machine.
+2. Locate and run the `.bat` file for basic functionality.
+
+---
+
+## ⚙️ Configuration & Support
+
+### Pre-built Configs
+Before setting everything up manually, **check in with Support**. There may already be a specific configuration file optimized for your use case.
+
+### Importing/Exporting
+Admins can freely manage environment settings:
+* Navigate to the **Admin Dashboard**.
+* Use the **Import/Export** tools to move configuration files between instances.
