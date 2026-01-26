@@ -328,8 +328,8 @@
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-zinc-200" id="scanned-items-body">
-                                    {% if printing_note and printing_note.records.all %}
-                                        {% for record in printing_note.records.all %}
+                                    {% if printing_note and records %}
+                                        {% for record in records %}
                                         <tr class="bg-white even:bg-zinc-50">
                                             <td class="px-2 py-2 text-sm text-zinc-900">{{ record.barcode }}</td>
                                             <td class="px-2 py-2 text-sm text-zinc-900">{{ record.net_weight }} {{ record.unit_of_measure }}</td>

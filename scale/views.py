@@ -3693,7 +3693,8 @@ def printing_station(request):
             'scales': Scale.objects.filter(is_active=True),
             'products': processed_products,
             'printing_note': printing_note,
-            'product_tare_weights': product_tare_weights
+            'product_tare_weights': product_tare_weights,
+            'records': PrintingRecord.objects.filter(printing_note=printing_note).order_by('-timestamp'),
             # Pass today's date for display if needed
         }
         return render(request, 'scale/printing_station.html', context)
