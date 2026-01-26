@@ -3586,6 +3586,8 @@ def printing_station(request):
         tare_weight = request.POST.get('tare_weight') or 0
         net_weight = request.POST.get('net_weight') or 0
         
+        moisture = request.POST.get('moisture') or 0
+        
         # Find or Create Note
         printing_note = None
         if printing_note_id:
@@ -3658,6 +3660,7 @@ def printing_station(request):
             gross_weight=gross_weight,
             tare_weight=tare_weight,
             net_weight=net_weight,
+            moisture=moisture,
             unit_of_measure='kg' # Default for now
         )
         

@@ -83,6 +83,7 @@
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Gross</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Tare</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Net</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Moisture (%)</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Timestamp</th>
                         <th scope="col" class="relative px-6 py-3">
                             <span class="sr-only">Actions</span>
@@ -98,6 +99,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.gross_weight }} {{ record.unit_of_measure }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.tare_weight }} {{ record.unit_of_measure }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900">{{ record.net_weight }} {{ record.unit_of_measure }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.moisture }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900">{{ record.timestamp|date:"M d, Y H:i" }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <form action="{% url 'scale:printing_record_delete' record.id %}" method="post" class="inline-block" onsubmit="return confirm('Are you sure you want to delete this record?');">
@@ -173,6 +175,7 @@
                     <th class="py-2 font-bold text-right">Gross (kg)</th>
                     <th class="py-2 font-bold text-right">Tare (kg)</th>
                     <th class="py-2 font-bold text-right">Net (kg)</th>
+                    <th class="py-2 font-bold text-right">Moisture (%)</th>
                 </tr>
             </thead>
             <tbody>
@@ -183,6 +186,7 @@
                     <td class="py-2 text-right">{{ record.gross_weight }}</td>
                     <td class="py-2 text-right">{{ record.tare_weight }}</td>
                     <td class="py-2 text-right font-bold">{{ record.net_weight }}</td>
+                    <td class="py-2 text-right">{{ record.moisture }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
