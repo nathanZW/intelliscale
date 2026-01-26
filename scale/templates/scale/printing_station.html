@@ -41,6 +41,7 @@
     {% csrf_token %}
     <input type="hidden" id="printing-record-id" name="printing_record_id" value="">
     <input type="hidden" id="printing-note-id" name="printing_note_id" value="{{ printing_note.id|default:'' }}">
+    <input type="hidden" id="rescan-flag" name="rescan" value="false">
     <div class="grid grid-cols-2 gap-6">
         <!-- Left column - Machine/Weighing Data (50%) -->
         <div class="col-span-1 space-y-6">
@@ -396,6 +397,34 @@
     </div>
     </form>
 </div>
+</div>
+
+<!-- Rescan Confirmation Modal -->
+<div id="rescan-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100">
+                <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">Barcode Exists</h3>
+            <div class="mt-2 px-7 py-3">
+                <p class="text-sm text-gray-500">
+                    This barcode (<span id="rescan-barcode-display" class="font-mono font-bold"></span>) has already been recorded in this note. Do you want to update it with the new weight?
+                </p>
+            </div>
+            <div class="items-center px-4 py-3">
+                <button id="confirm-rescan-btn" class="mb-2 px-4 py-2 bg-yellow-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                    Yes, Rescan & Update
+                </button>
+                <button id="cancel-rescan-btn" class="mt-3 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                    Cancel (Clear Entry)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 
 
@@ -690,10 +719,35 @@
 
         // Intercept Form Submission
         $('#printing-form').on('submit', function(e) {
+            // Check for barcode existence first
+            const barcode = $('#barcode-input').val().trim();
+            if (!barcode) return; // Let backend handle empty barcode error
+
+            // Check if we are already in a confirmed rescan state
+            if ($('#rescan-flag').val() === 'true') {
+                return true; // Use default submission
+            }
+
+            // Check if barcode exists in the Scanned Items table
+            let exists = false;
+            $('#scanned-items-body tr').each(function() {
+                const rowBarcode = $(this).find('td:first').text().trim();
+                if (rowBarcode === barcode) {
+                    exists = true;
+                    return false;
+                }
+            });
+
+            if (exists) {
+                e.preventDefault();
+                // Show Modal
+                $('#rescan-barcode-display').text(barcode);
+                $('#rescan-modal').removeClass('hidden');
+                return false;
+            }
+
+            // Standard Validation
             if (isValidationEnabled) {
-                const barcode = $('#barcode-input').val();
-                
-                // Only validate if there is a barcode
                 if (barcode && barcode.trim().length > 0) {
                      if (!validateCode39Mod43(barcode)) {
                         e.preventDefault();
@@ -702,6 +756,20 @@
                     }
                 }
             }
+        });
+
+        // Rescan Modal Handlers
+        $('#confirm-rescan-btn').click(function() {
+            $('#rescan-flag').val('true');
+            $('#rescan-modal').addClass('hidden');
+            $('#printing-form').off('submit'); // Remove handler to avoid validation loop
+            $('#printing-form').trigger('submit');
+        });
+
+        $('#cancel-rescan-btn').click(function() {
+            $('#rescan-modal').addClass('hidden');
+            $('#barcode-input').val(''); // Clear the duplicate input
+            $('#barcode-input').focus();
         });
     });
 
@@ -749,12 +817,6 @@
                     dataType: 'json',
                     success: function(data) {
                         if (data.success) {
-                            // Only populate if fields are empty to avoid overwriting user changes?
-                            // Requirement says "auto populate... though it should still be editable"
-                            // A common pattern is to populate if we found something, overriding or just filling.
-                            // Given "auto populate", filling regardless of current content (or at least if it matches the *previous* lookup or is empty) is standard.
-                            // We will simply populate.
-                            
                             if (data.first_name) firstNameInput.val(data.first_name);
                             if (data.last_name) lastNameInput.val(data.last_name);
                             
@@ -762,13 +824,6 @@
                             console.log('Grower found:', data);
                         } else {
                             console.log('Grower not found or no previous data');
-                            // We could clear the fields, or leave them.
-                            // "grower not found" usually means this is a new grower number for the system context,
-                            // or at least for the PrintingNote context.
-                            // We'll leave the fields alone or clear them?
-                            // If I type a wrong number, I might want fields cleared.
-                            // But if I am creating a NEW grower, I type the number, then type the name.
-                            // So we probably SHOULD NOT clear, just in case they typed the name first (unlikely flow but possible).
                         }
                     },
                     error: function(xhr, status, error) {

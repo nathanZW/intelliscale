@@ -3640,9 +3640,28 @@ def printing_station(request):
             return redirect('scale:printing_station')
 
         # Check if barcode already exists in this note
-        if PrintingRecord.objects.filter(printing_note=printing_note, barcode=barcode).exists():
-            messages.error(request, f"Barcode {barcode} already exists in this note.")
-            return redirect('scale:printing_station')
+        existing_record = PrintingRecord.objects.filter(printing_note=printing_note, barcode=barcode).first()
+        rescan = request.POST.get('rescan')
+
+        if existing_record:
+            if rescan == 'true':
+                # Update existing record
+                existing_record.scale_id = scale.scale_id if scale else scale_id
+                existing_record.product = product
+                existing_record.gross_weight = gross_weight
+                existing_record.tare_weight = tare_weight
+                existing_record.net_weight = net_weight
+                existing_record.moisture = moisture
+                # Update timestamp to bring it to top of list
+                from django.utils import timezone
+                existing_record.timestamp = timezone.now()
+                existing_record.save()
+                
+                messages.success(request, f"Updated {barcode} ({net_weight} kg)")
+                return redirect('scale:printing_station')
+            else:
+                messages.error(request, f"Barcode {barcode} already exists in this note.")
+                return redirect('scale:printing_station')
 
         # Look up Scale object to get its scale_id string (e.g., "000087")
         scale = None
