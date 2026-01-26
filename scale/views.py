@@ -2451,6 +2451,34 @@ def export_records_to_excel(records):
     wb.save(response)
     return response
 
+@login_required
+def lookup_grower(request):
+    grower_number = request.GET.get('grower_number')
+    if not grower_number:
+        return JsonResponse({'success': False, 'message': 'No grower number provided'})
+    
+    # improved lookup: find the most recent PrintingNote with this grower number
+    # that has a non-empty first_name or last_name
+    note = PrintingNote.objects.filter(
+        grower_number=grower_number
+    ).exclude(
+        first_name='', last_name=''
+    ).order_by('-created_at').first()
+    
+    if note:
+        return JsonResponse({
+            'success': True,
+            'first_name': note.first_name,
+            'last_name': note.last_name
+        })
+    else:
+        return JsonResponse({
+            'success': False, 
+            'message': 'Grower not found',
+            'first_name': '',
+            'last_name': ''
+        })
+
 def export_records_to_pdf(records):
     from django.http import HttpResponse
     from reportlab.lib import colors

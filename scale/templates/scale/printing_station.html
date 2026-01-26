@@ -417,8 +417,8 @@
                 <p class="text-lg font-bold">{{ printing_note.get_total_net_weight|floatformat:2 }} kg</p>
              </div>
              <div>
-                <p class="text-xs uppercase text-gray-600">Expected Bales</p>
-                <p class="text-lg font-bold">{{ printing_note.expected_bales|default:"-" }}</p>
+                <p class="text-xs uppercase text-gray-600">Received Bales</p>
+                <p class="text-lg font-bold">{{ printing_note.expected_bales|default:"-" }} / {{ printing_note.records.count }}</p>
              </div>
         </div>
     </div>
@@ -714,6 +714,56 @@
                 }
             }
         }
+    });
+    
+    // --- Grower Lookup Logic ---
+    $(document).ready(function() {
+        const growerInput = $('#grower-number');
+        const firstNameInput = $('#first-name');
+        const lastNameInput = $('#last-name');
+
+        growerInput.on('blur', function() {
+            const growerNumber = $(this).val();
+            
+            if (growerNumber) {
+                // Show loading state implicitly or explicitly if desired
+                
+                $.ajax({
+                    url: "{% url 'scale:lookup_grower' %}",
+                    data: {
+                        'grower_number': growerNumber
+                    },
+                    dataType: 'json',
+                    success: function(data) {
+                        if (data.success) {
+                            // Only populate if fields are empty to avoid overwriting user changes?
+                            // Requirement says "auto populate... though it should still be editable"
+                            // A common pattern is to populate if we found something, overriding or just filling.
+                            // Given "auto populate", filling regardless of current content (or at least if it matches the *previous* lookup or is empty) is standard.
+                            // We will simply populate.
+                            
+                            if (data.first_name) firstNameInput.val(data.first_name);
+                            if (data.last_name) lastNameInput.val(data.last_name);
+                            
+                            // Optional: Flash success or something similar
+                            console.log('Grower found:', data);
+                        } else {
+                            console.log('Grower not found or no previous data');
+                            // We could clear the fields, or leave them.
+                            // "grower not found" usually means this is a new grower number for the system context,
+                            // or at least for the PrintingNote context.
+                            // We'll leave the fields alone or clear them?
+                            // If I type a wrong number, I might want fields cleared.
+                            // But if I am creating a NEW grower, I type the number, then type the name.
+                            // So we probably SHOULD NOT clear, just in case they typed the name first (unlikely flow but possible).
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error lookup grower:', error);
+                    }
+                });
+            }
+        });
     });
 </script>
 {% endblock %}
