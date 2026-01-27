@@ -3581,7 +3581,7 @@ def printing_station(request):
         # Scale/Record Data
         scale_id = request.POST.get('scale_id')
         product_id = request.POST.get('product_id')
-        barcode = request.POST.get('barcode', '').strip()
+        barcode = request.POST.get('barcode', '')
         gross_weight = request.POST.get('gross_weight') or 0
         tare_weight = request.POST.get('tare_weight') or 0
         net_weight = request.POST.get('net_weight') or 0

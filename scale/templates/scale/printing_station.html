@@ -720,7 +720,7 @@
         // Intercept Form Submission
         $('#printing-form').on('submit', function(e) {
             // Check for barcode existence first
-            const barcode = $('#barcode-input').val().trim();
+            const barcode = $('#barcode-input').val();
             if (!barcode) return; // Let backend handle empty barcode error
 
             // Check if we are already in a confirmed rescan state
@@ -731,7 +731,7 @@
             // Check if barcode exists in the Scanned Items table
             let exists = false;
             $('#scanned-items-body tr').each(function() {
-                const rowBarcode = $(this).find('td:first').text().trim();
+                const rowBarcode = $(this).find('td:first').text();
                 if (rowBarcode === barcode) {
                     exists = true;
                     return false;
@@ -748,7 +748,7 @@
 
             // Standard Validation
             if (isValidationEnabled) {
-                if (barcode && barcode.trim().length > 0) {
+                if (barcode && barcode.length > 0) {
                      if (!validateCode39Mod43(barcode)) {
                         e.preventDefault();
                         alert('Invalid Code 39 Barcode. Please check the barcode.');

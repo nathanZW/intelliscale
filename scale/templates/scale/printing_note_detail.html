@@ -205,7 +205,7 @@
                 rows.forEach(row => {
                     const barcodeCell = row.cells[0]; // Barcode is the first column
                     if (barcodeCell) {
-                        const text = barcodeCell.textContent.trim().toLowerCase();
+                        const text = barcodeCell.textContent.toLowerCase();
                         if (text.includes(searchTerm)) {
                             row.style.display = '';
                         } else {
