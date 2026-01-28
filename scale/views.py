@@ -3625,6 +3625,14 @@ def printing_station(request):
                 product = Product.objects.get(id=product_id)
             except Product.DoesNotExist:
                 pass
+
+        # Look up Scale object to get its scale_id
+        scale = None
+        if scale_id:
+            try:
+                scale = Scale.objects.get(id=scale_id)
+            except (Scale.DoesNotExist, ValueError):
+                pass
                 
         if not barcode:
             messages.error(request, "Barcode cannot be empty.")
@@ -3663,13 +3671,7 @@ def printing_station(request):
                 messages.error(request, f"Barcode {barcode} already exists in this note.")
                 return redirect('scale:printing_station')
 
-        # Look up Scale object to get its scale_id string (e.g., "000087")
-        scale = None
-        if scale_id:
-            try:
-                scale = Scale.objects.get(id=scale_id)
-            except (Scale.DoesNotExist, ValueError):
-                pass
+
 
         PrintingRecord.objects.create(
             printing_note=printing_note,
