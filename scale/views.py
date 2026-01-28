@@ -3833,14 +3833,18 @@ def printing_note_export_xlsx(request, pk):
     ws['A1'].alignment = center_align
 
     # Metadata rows
+    # Round totals to 2 decimal places
+    total_gross = float(note.get_total_gross_weight() or 0)
+    total_net = float(note.get_total_net_weight() or 0)
+    
     metadata = [
         ("Note ID:", str(note.id)),
         ("Grower Number:", note.grower_number),
         ("Grower Name:", f"{note.first_name} {note.last_name}"),
         ("Created At:", note.created_at.strftime('%Y-%m-%d %H:%M')),
         ("Expected Bales:", str(note.expected_bales or "-")),
-        ("Total Gross:", f"{note.get_total_gross_weight()} kg"),
-        ("Total Net:", f"{note.get_total_net_weight()} kg"),
+        ("Total Gross:", f"{total_gross:.2f} kg"),
+        ("Total Net:", f"{total_net:.2f} kg"),
     ]
 
     row_num = 3
@@ -3852,7 +3856,7 @@ def printing_note_export_xlsx(request, pk):
     row_num += 2  # Gap
 
     # Table Headers
-    headers = ['Barcode', 'Product', 'Scale', 'Gross', 'Tare', 'Net', 'Timestamp']
+    headers = ['Barcode', 'Product', 'Scale', 'Gross', 'Tare', 'Net', 'Moisture', 'Timestamp']
     ws.append([]) # Empty row space if needed or just set start row
     
     # Reset row_num for table
@@ -3876,6 +3880,7 @@ def printing_note_export_xlsx(request, pk):
             f"{record.gross_weight} {record.unit_of_measure}",
             f"{record.tare_weight} {record.unit_of_measure}",
             f"{record.net_weight} {record.unit_of_measure}",
+            f"{record.moisture}%" if record.moisture else "0%",
             record.timestamp.strftime('%Y-%m-%d %H:%M')
         ]
         
@@ -3883,7 +3888,7 @@ def printing_note_export_xlsx(request, pk):
             cell = ws.cell(row=row_num, column=col_idx, value=value)
             cell.alignment = left_align
             cell.border = thin_border
-            if col_idx in [4, 5, 6]: # Weight columns
+            if col_idx in [4, 5, 6, 7]: # Weight columns and Moisture
                 cell.alignment = right_align
         
         row_num += 1
