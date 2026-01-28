@@ -334,18 +334,18 @@
                             <table class="min-w-full divide-y divide-zinc-200">
                                 <thead class="bg-zinc-100">
                                     <tr>
-                                        <th class="px-2 py-2 text-sm font-medium text-zinc-500">Barcode</th>
-                                        <th class="px-2 py-2 text-sm font-medium text-zinc-500">Weight</th>
-                                        <th class="px-2 py-2 text-sm font-medium text-zinc-500">Moisture (%)</th>
+                                        <th class="px-2 py-2 text-sm font-medium text-zinc-500 text-center">Barcode</th>
+                                        <th class="px-2 py-2 text-sm font-medium text-zinc-500 text-center">Weight</th>
+                                        <th class="px-2 py-2 text-sm font-medium text-zinc-500 text-center">Moisture (%)</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-zinc-200" id="scanned-items-body">
                                     {% if printing_note and records %}
                                         {% for record in records %}
                                         <tr class="bg-white even:bg-zinc-50">
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.barcode }}</td>
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.net_weight }} {{ record.unit_of_measure }}</td>
-                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.moisture }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900 text-center">{{ record.barcode }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900 text-center">{{ record.net_weight }} {{ record.unit_of_measure }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900 text-center">{{ record.moisture }}</td>
                                         </tr>
                                         {% endfor %}
                                     {% else %}
