@@ -3843,6 +3843,7 @@ def printing_note_export_xlsx(request, pk):
         ("Grower Name:", f"{note.first_name} {note.last_name}"),
         ("Created At:", note.created_at.strftime('%Y-%m-%d %H:%M')),
         ("Expected Bales:", str(note.expected_bales or "-")),
+        ("Received Bales:", str(note.records.count())),
         ("Total Gross:", f"{total_gross:.2f} kg"),
         ("Total Net:", f"{total_net:.2f} kg"),
     ]

@@ -158,8 +158,8 @@
                 <p class="text-2xl font-bold">{{ note.get_total_net_weight|floatformat:2 }} kg</p>
              </div>
              <div>
-                <p class="text-sm uppercase text-gray-600">Expected Bales</p>
-                <p class="text-2xl font-bold">{{ note.expected_bales|default:"-" }}</p>
+                <p class="text-sm uppercase text-gray-600">Received Bales</p>
+                <p class="text-2xl font-bold">{{ note.expected_bales|default:"-" }} / {{ note.records.count }}</p>
              </div>
         </div>
     </div>
