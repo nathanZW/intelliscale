@@ -336,6 +336,7 @@
                                     <tr>
                                         <th class="px-2 py-2 text-sm font-medium text-zinc-500">Barcode</th>
                                         <th class="px-2 py-2 text-sm font-medium text-zinc-500">Weight</th>
+                                        <th class="px-2 py-2 text-sm font-medium text-zinc-500">Moisture (%)</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-zinc-200" id="scanned-items-body">
@@ -344,11 +345,12 @@
                                         <tr class="bg-white even:bg-zinc-50">
                                             <td class="px-2 py-2 text-sm text-zinc-900">{{ record.barcode }}</td>
                                             <td class="px-2 py-2 text-sm text-zinc-900">{{ record.net_weight }} {{ record.unit_of_measure }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900">{{ record.moisture }}</td>
                                         </tr>
                                         {% endfor %}
                                     {% else %}
                                         <tr>
-                                            <td colspan="2" class="px-2 py-2 text-sm text-zinc-500 text-center">No items scanned yet.</td>
+                                            <td colspan="3" class="px-2 py-2 text-sm text-zinc-500 text-center">No items scanned yet.</td>
                                         </tr>
                                     {% endif %}
                                 </tbody>
@@ -638,7 +640,7 @@
                 $('input[name="last_name"]').val('');
                 $('input[name="expected_bales"]').val('');
                 $('input[name="barcode"]').val('');
-                $('#scanned-items-body').html('<tr><td colspan="2" class="px-2 py-2 text-sm text-zinc-500 text-center">No items scanned yet.</td></tr>');
+                $('#scanned-items-body').html('<tr><td colspan="3" class="px-2 py-2 text-sm text-zinc-500 text-center">No items scanned yet.</td></tr>');
                 // You might want to unset the value of printing_note in context via full reload or AJAX
                 // For now, client-side clear is fine, next "Save" will create a new note if logic allows, 
                 // OR we need to signal backend to create new note.
