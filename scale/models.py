@@ -483,7 +483,7 @@ class PrintingRecord(models.Model):
     gross_weight = models.DecimalField(max_digits=10, decimal_places=2)
     tare_weight = models.DecimalField(max_digits=10, decimal_places=2)
     net_weight = models.DecimalField(max_digits=10, decimal_places=2)
-    moisture = models.DecimalField(max_digits=10, decimal_places=2)
+    moisture = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     unit_of_measure = models.CharField(max_length=50, default='kg')
     timestamp = models.DateTimeField(auto_now_add=True)
     

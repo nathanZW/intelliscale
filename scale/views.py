@@ -3586,7 +3586,7 @@ def printing_station(request):
         tare_weight = request.POST.get('tare_weight') or 0
         net_weight = request.POST.get('net_weight') or 0
         
-        moisture = request.POST.get('moisture') or 0
+        moisture = request.POST.get('moisture') or None
         
         # Find or Create Note
         printing_note = None

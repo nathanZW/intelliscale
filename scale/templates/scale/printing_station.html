@@ -345,7 +345,7 @@
                                         <tr class="bg-white even:bg-zinc-50">
                                             <td class="px-2 py-2 text-sm text-zinc-900 text-center">{{ record.barcode }}</td>
                                             <td class="px-2 py-2 text-sm text-zinc-900 text-center">{{ record.net_weight }} {{ record.unit_of_measure }}</td>
-                                            <td class="px-2 py-2 text-sm text-zinc-900 text-center">{{ record.moisture }}</td>
+                                            <td class="px-2 py-2 text-sm text-zinc-900 text-center">{{ record.moisture|default:"" }}</td>
                                         </tr>
                                         {% endfor %}
                                     {% else %}
@@ -486,7 +486,7 @@
                     <td class="py-2 text-right">{{ record.gross_weight }}</td>
                     <td class="py-2 text-right">{{ record.tare_weight }}</td>
                     <td class="py-2 text-right font-bold">{{ record.net_weight }}</td>
-                    <td class="py-2 text-right">{{ record.moisture }}</td>
+                    <td class="py-2 text-right">{{ record.moisture|default:"" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
