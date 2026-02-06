@@ -3588,6 +3588,17 @@ def printing_station(request):
         
         moisture = request.POST.get('moisture') or None
         
+        # Validate moisture is a valid percentage (0-100)
+        if moisture is not None:
+            try:
+                moisture_float = float(moisture)
+                if moisture_float < 0 or moisture_float > 100:
+                    messages.error(request, "Moisture must be between 0 and 100%.")
+                    return redirect('scale:printing_station')
+            except (ValueError, TypeError):
+                messages.error(request, "Invalid moisture value.")
+                return redirect('scale:printing_station')
+        
         # Find or Create Note
         printing_note = None
         if printing_note_id:
