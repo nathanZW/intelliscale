@@ -1,147 +1,14 @@
 from django.db import models
-from users.models import CustomUser
 import qrcode
 from io import BytesIO
 from django.core.files import File
-from PIL import Image
-from django.conf import settings
 
-class Scale(models.Model):
-    name = models.CharField(max_length=100)
-    scale_id = models.CharField(max_length=100, unique=True, blank=True, null=True, help_text="Unique identifier for the scale. Can be changed by an admin.")
-    com_port = models.CharField(max_length=50, blank=True, null=True)
-    baud_rate = models.IntegerField(default=9600)
-    timeout = models.IntegerField(default=1)
-    parity = models.CharField(max_length=10, choices=[('N', 'None'), ('E', 'Even'), ('O', 'Odd')], default='N')
-    stop_bits = models.IntegerField(default=1)
-    data_bits = models.IntegerField(default=8)
-    manufacturer = models.CharField(max_length=50, blank=True, null=True)
-    model_number = models.CharField(max_length=50, blank=True, null=True)
-    max_capacity = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, help_text="Maximum weight capacity in kg")
-    is_active = models.BooleanField(default=True)
-    last_connection_status = models.CharField(max_length=50, default='disconnected', blank=True, null=True)
-    last_seen = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    tare_weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    
-    def __str__(self):
-        return f"{self.name} ({self.model_number})"
+from users.models import CustomUser
+from .driver import Driver
+from .truck import Truck
+from .trailer import Trailer
+from .product import Product
 
-
-class ScaleIdHistory(models.Model):
-    """Logs changes to the scale_id of a Scale."""
-    scale = models.ForeignKey(Scale, on_delete=models.CASCADE, related_name='id_history')
-    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    change_date = models.DateTimeField(auto_now_add=True)
-    old_id = models.CharField(max_length=100)
-    new_id = models.CharField(max_length=100)
-
-    class Meta:
-        ordering = ['-change_date']
-    
-    
-class WeighingProcess(models.Model):
-    WEIGHT_ROUNDING_CHOICES = [
-        (3, '0.001'),
-        (2, '0.01'),
-        (1, '0.1'),
-        (0, '1.0'),
-    ]
-    
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    custom_fields_schema = models.JSONField(default=list, blank=True)
-    erp_target_model = models.CharField(max_length=100, blank=True)
-    is_active = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    max_weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    min_weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    weight_rounding = models.IntegerField(blank=True, null=True, choices=WEIGHT_ROUNDING_CHOICES, default=2)
-    allow_manual_entry = models.BooleanField(default=False)
-    process_type = models.CharField(max_length=100, blank=True, null=True, choices=[('WeighBridge', 'WeighBridge'),('Manual', 'Manual'), ('Automated', 'Automated'), ('ctl_workflow', 'CTL Workflow'), ('ctl_commercial_workflow', 'CTL Commercial Workflow')], default='WeighBridge')
-    allow_marshalling = models.BooleanField(default=False)
-    allow_bale_insert = models.BooleanField(default=False)
-    allow_spaces_in_barcode = models.BooleanField(default=False, help_text="If enabled, spaces in barcodes will not be stripped (e.g. for Code 39 Mod 43)")
-    use_code39_mod43_validation = models.BooleanField(default=False, help_text="If enabled, validates scanned barcodes using Code 39 Mod 43 algorithm.")
-    rolling_hessian = models.BooleanField(default=False, help_text="If enabled, pre-populates the hessian value from the previous weighing record for the same delivery note.")
-    
-    def __str__(self):
-        return self.name
-
-    
-
-class Product(models.Model):
-    erp_product_id = models.CharField(max_length=100, blank=True)
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    is_active = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    tare_weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    
-    def __str__(self):
-        return self.name
-    
-
-class WeighingRecord(models.Model):
-    scale = models.ForeignKey(Scale, on_delete=models.CASCADE)
-    weighing_scale_id = models.CharField(max_length=100, blank=True, help_text="The ID of the scale at the time of weighing.")
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    process = models.ForeignKey(WeighingProcess, on_delete=models.CASCADE)
-    barcode = models.CharField(max_length=100, blank=True)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    timestamp = models.DateTimeField(auto_now_add=True)
-    gross_weight = models.DecimalField(max_digits=10, decimal_places=2)
-    tare_weight = models.DecimalField(max_digits=10, decimal_places=2)
-    net_weight = models.DecimalField(max_digits=10, decimal_places=2)
-    unit_of_measure = models.CharField(max_length=50)
-    custom_data = models.JSONField(default=dict, blank=True)
-    notes = models.TextField(blank=True)
-    is_synced = models.BooleanField(default=False)
-    erp_record_id = models.CharField(max_length=100, blank=True)
-    erp_model_name = models.CharField(max_length=100, blank=True)
-    last_sync_attempt = models.DateTimeField(null=True, blank=True)
-    sync_error_message = models.TextField(blank=True)
-    print_count = models.IntegerField(default=0)
-    last_printed_at = models.DateTimeField(null=True, blank=True)
-    delivery_note = models.ForeignKey('DeliveryNote', on_delete=models.SET_NULL, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return f"{self.scale.name} - {self.product.name} - {self.timestamp}"
-
-
-class Driver(models.Model):
-    name = models.CharField(max_length=100)
-    phone = models.CharField(max_length=100, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return self.name
-
-class Truck(models.Model):
-    brand = models.CharField(max_length=100, blank=True, null=True)
-    license_plate = models.CharField(max_length=100)
-    color = models.CharField(max_length=100, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.license_plate
-    
-class Trailer(models.Model):
-    brand = models.CharField(max_length=100, blank=True, null=True)
-    license_plate = models.CharField(max_length=100)
-    color = models.CharField(max_length=100, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return self.license_plate    
 
 class DeliveryNote(models.Model):
     delivery_note_number = models.CharField(max_length=100, blank=True)
@@ -176,6 +43,9 @@ class DeliveryNote(models.Model):
         Returns a list of dictionaries: [{'barcode': '...', 'weight_display': '...kg', 'group_number': '...', 'lot_number': '...'}]
         for all scanned barcodes associated with this delivery note, ordered by scan time.
         """
+        # Import here to avoid circular import
+        from .weighing_record import WeighingRecord
+        
         # Get all WeighingRecords for this delivery note that have a barcode
         # We use .prefetch_related() to get the full records with custom_data
         records_dict = {}
@@ -397,6 +267,9 @@ class DeliveryNote(models.Model):
         Recalls a bale by removing its barcode from the scanned list,
         decrementing the scanned count, and deleting the weighing record.
         """
+        # Import here to avoid circular import
+        from .weighing_record import WeighingRecord
+        
         if allow_spaces:
             processed_barcode = str(barcode) if barcode else ''
         else:
@@ -422,70 +295,3 @@ class DeliveryNote(models.Model):
             self.save()
             return True  # Recall was successful
         return False  # Barcode was not found or not scanned
-    
-
-class ErpSystem(models.Model):
-    name = models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return self.name
-    
-    
-class CompanySettings(models.Model):
-    company_name = models.CharField(max_length=100)
-    erp_system = models.ForeignKey(ErpSystem, on_delete=models.CASCADE)
-    api_key = models.CharField(max_length=100, blank=True, null=True)
-    erp_username = models.CharField(max_length=100, blank=True, null=True)
-    erp_password = models.CharField(max_length=100, blank=True, null=True)
-    api_url = models.CharField(max_length=100, blank=True, null=True)
-    database_name = models.CharField(max_length=100, blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return f"{self.company_name} - {self.erp_system}"
-
-
-    
-    
-
-
-from django.db.models import Sum
-
-class PrintingNote(models.Model):
-    grower_name = models.CharField(max_length=100, blank=True)
-    grower_number = models.CharField(max_length=100, blank=True)
-    first_name = models.CharField(max_length=100, blank=True)
-    last_name = models.CharField(max_length=100, blank=True)
-    expected_bales = models.IntegerField(null=True, blank=True, help_text="Total expected number of barcodes/bales")
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"Note {self.id} - {self.grower_name or self.grower_number or 'No Name'} ({self.created_at.strftime('%Y-%m-%d')})"
-
-    def get_total_gross_weight(self):
-        return self.records.aggregate(total=Sum('gross_weight'))['total'] or 0
-
-    def get_total_net_weight(self):
-        return self.records.aggregate(total=Sum('net_weight'))['total'] or 0
-
-
-class PrintingRecord(models.Model):
-    printing_note = models.ForeignKey(PrintingNote, on_delete=models.CASCADE, related_name='records')
-    barcode = models.CharField(max_length=100, blank=True)
-    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
-    scale_id = models.CharField(max_length=100, blank=True)
-    gross_weight = models.DecimalField(max_digits=10, decimal_places=2)
-    tare_weight = models.DecimalField(max_digits=10, decimal_places=2)
-    net_weight = models.DecimalField(max_digits=10, decimal_places=2)
-    moisture = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    unit_of_measure = models.CharField(max_length=50, default='kg')
-    timestamp = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return f"{self.barcode} - {self.net_weight}{self.unit_of_measure}"
