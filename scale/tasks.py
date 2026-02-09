@@ -20,6 +20,7 @@ def sync_odoo_delivery_notes():
     # Try to acquire the lock
     if cache.add(lock_id, "true", timeout):
         try:
+            print("[SYNC TASK] Acquired lock, starting Odoo delivery note sync...")
             logger.info("Acquired sync lock, starting sync task")
             # Get company settings for API URL
             company_settings = CompanySettings.objects.first()
@@ -28,8 +29,10 @@ def sync_odoo_delivery_notes():
                 return "Error: API URL not configured"
 
             # Fetch from Odoo API
+            api_url = f'{company_settings.api_url}/api/grower-delivery-notes'
+            print(f"[SYNC TASK] Fetching from: {api_url}")
             response = requests.get(
-                f'{company_settings.api_url}/api/grower-delivery-notes',
+                api_url,
                 params={'include_bales': 'true',
                         'state': 'open,checked,laid'},
                 headers={
@@ -45,10 +48,12 @@ def sync_odoo_delivery_notes():
                     f"Odoo API error: Status {response.status_code} for URL {response.url}. "
                     f"Response: {response.text}"
                 )
+                print(f"[SYNC TASK] API Error: {error_message}")
                 logger.error(error_message)
                 return f"API Error: {response.status_code}"
 
             odoo_data = response.json()
+            print(f"[SYNC TASK] API returned success={odoo_data.get('success')}. Found {len(odoo_data.get('data', []))} records.")
 
             if not odoo_data.get('success'):
                 logger.error("Odoo API returned success=false")
@@ -67,15 +72,18 @@ def sync_odoo_delivery_notes():
                     error_count += 1
 
             result = f"Synced: {synced_count}, Errors: {error_count}"
+            print(f"[SYNC TASK] Sync complete: {result}")
             logger.info(result)
             return result
 
         except Exception as e:
+            print(f"[SYNC TASK] CRITICAL FAILURE: {str(e)}")
             logger.error(f"Sync task failed: {str(e)}")
             return f"Task failed: {str(e)}"
         finally:
             # Release the lock
             cache.delete(lock_id)
+            print("[SYNC TASK] Released sync lock.")
             logger.info("Released sync lock")
     else:
         # Another sync is already running
@@ -118,10 +126,12 @@ def sync_single_delivery_note(odoo_record):
         delivery_note.save()
         
         action = "Created" if created else "Updated"
+        print(f"[SYNC TASK]   + {action} delivery note: {document_number}")
         logger.info(f"{action} delivery note: {document_number}")
         
     except Exception as e:
         # Log error but don't crash the whole sync
+        print(f"[SYNC TASK]   ! Failed to sync record {odoo_record.get('id')}: {str(e)}")
         logger.error(f"Failed to sync record {odoo_record.get('id')}: {str(e)}")
         
         # Try to update error message if record exists

@@ -80,6 +80,7 @@ urlpatterns = [
     path('company-settings/', views.company_settings, name='company_settings'),
     path('configuration/import-export/', views.config_import_export, name='config_import_export'),
     path('configuration/export/', views.config_export, name='config_export'),
+    path('data-management/', views.data_management, name='data_management'),
     
     # Driver Management URLs
     path('drivers/create-ajax/', views.driver_create_ajax, name='driver_create_ajax'),

@@ -1641,11 +1641,13 @@ def manual_sync_delivery_notes(request):
     from django.core.cache import cache
 
     if request.method == 'POST':
+        print(f"[SYNC] Manual delivery note sync triggered by user: {request.user}")
         try:
             # Check if another sync is already running by checking the same lock
             lock_id = "sync_odoo_delivery_notes_lock"
             if cache.get(lock_id):
                 # Another sync is already running
+                print("[SYNC] Skip: Another sync is already running.")
                 return JsonResponse({
                     'success': False,
                     'message': 'Another sync is currently running, please wait for it to complete.'
@@ -1653,6 +1655,7 @@ def manual_sync_delivery_notes(request):
 
             # Call the sync task asynchronously
             task_result = sync_odoo_delivery_notes.delay()
+            print(f"[SYNC] Task initiated successfully. Task ID: {task_result.id}")
 
             # Return success response
             return JsonResponse({
@@ -1661,6 +1664,7 @@ def manual_sync_delivery_notes(request):
                 'task_id': str(task_result.id)  # Include task ID for potential tracking
             })
         except Exception as e:
+            print(f"[SYNC] Error initiating sync: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'message': f'Error initiating sync: {str(e)}'
@@ -2727,6 +2731,36 @@ def config_export(request):
         return response
         
     return redirect('scale:config_import_export')
+
+@login_required
+@user_passes_test(is_admin)
+def data_management(request):
+    """Handle data management operations including bulk delete of delivery notes and weighing records"""
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'delete_delivery_notes':
+            try:
+                # Delete all delivery notes (weighing records will cascade delete based on model settings)
+                count = DeliveryNote.objects.count()
+                DeliveryNote.objects.all().delete()
+                messages.success(request, f'Successfully deleted {count} delivery notes.')
+            except Exception as e:
+                messages.error(request, f'Error deleting delivery notes: {str(e)}')
+        
+        elif action == 'delete_weighing_records':
+            try:
+                # Catches all weighing recordes that are not attached to a delivery note.
+                # This happens in cases where a database is restored and a record is left orphaned.
+                count = WeighingRecord.objects.count()
+                WeighingRecord.objects.all().delete()
+                messages.success(request, f'Successfully deleted {count} weighing records.')
+            except Exception as e:
+                messages.error(request, f'Error deleting weighing records: {str(e)}')
+        
+        return redirect('scale:data_management')
+    
+    return render(request, 'scale/data_management.html')
 
 @login_required
 @user_passes_test(is_admin)
