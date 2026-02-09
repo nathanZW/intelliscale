@@ -71,6 +71,17 @@
                     {% endif %}
                 </div>
 
+                <!-- Target Endpoint -->
+                <div>
+                    <label for="{{ form.target_endpoint.id_for_label }}" class="block text-sm font-medium text-gray-700">Target Endpoint</label>
+                    <div class="mt-1">
+                        {{ form.target_endpoint }}
+                    </div>
+                    {% if form.target_endpoint.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.target_endpoint.errors }}</p>
+                    {% endif %}
+                </div>
+
                 <!-- API URL -->
                 <div>
                     <label for="{{ form.api_url.id_for_label }}" class="block text-sm font-medium text-gray-700">API URL</label>
