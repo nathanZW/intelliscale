@@ -7,7 +7,8 @@
 This installation will configure Intelliscale to run automatically on boot.
 
 1. **Installation:** Download and run the setup script:
-   * [intelliscale_setup.sh](https://github.com/user-attachments/files/25203618/intelliscale_setup.sh)
+   * [intelliscale_setup.sh](https://github.com/user-attachments/files/25204908/intelliscale_setup.sh)
+
 2. **Uninstallation:** If you need to remove the program and its configurations:
    * [intelliscale_cleanup.sh](https://github.com/user-attachments/files/25203711/intelliscale_cleanup.sh)
    
