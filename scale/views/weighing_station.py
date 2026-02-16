@@ -507,6 +507,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
             }
             headers = {
                 "User-Agent": "insomnia/11.5.0",
+                "Content-Type": "application/json",
                 "X-API-Key": api_key
             }
 
