@@ -296,9 +296,14 @@
                 <div class="px-6 py-5 border-b border-zinc-200 bg-blue-50">
                     <div class="flex justify-between w-full items-center">
                         <h2 class="text-md font-medium text-zinc-900">PRINTING NOTE DETAILS</h2>
-                        <button type="button" id="start-new-note-btn" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-8 px-3 py-1 ml-2">
-                            New Note
-                        </button>
+                        <div class="flex space-x-2">
+                            <button type="button" id="save-details-btn" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700 h-8 px-3 py-1 {% if not printing_note %}hidden{% endif %}">
+                                Save Details
+                            </button>
+                            <button type="button" id="start-new-note-btn" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-8 px-3 py-1">
+                                New Note
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="p-6">
@@ -633,21 +638,64 @@
 
         // --- UI Logic ---
 
+        // Save Details Helper
+        function saveNoteDetails(callback) {
+            const noteId = $('#printing-note-id').val();
+            if (!noteId) {
+                if (callback) callback(false);
+                return;
+            }
+
+            $.ajax({
+                url: "{% url 'scale:update_printing_note_details' %}",
+                type: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                data: {
+                    printing_note_id: noteId,
+                    grower_number: $('input[name="grower_number"]').val(),
+                    first_name: $('input[name="first_name"]').val(),
+                    last_name: $('input[name="last_name"]').val(),
+                    expected_bales: $('input[name="expected_bales"]').val()
+                },
+                success: function(data) {
+                    if (callback) callback(data.success);
+                },
+                error: function() {
+                    if (callback) callback(false);
+                }
+            });
+        }
+
+        // Save Details Button
+        $('#save-details-btn').click(function() {
+            const btn = $(this);
+            const originalText = btn.text();
+            btn.text('Saving...').prop('disabled', true);
+
+            saveNoteDetails(function(success) {
+                if (success) {
+                    btn.text('Saved ✓');
+                    setTimeout(function() { btn.text(originalText); }, 1500);
+                } else {
+                    btn.text('Error');
+                    setTimeout(function() { btn.text(originalText); }, 1500);
+                }
+                btn.prop('disabled', false);
+            });
+        });
+
         // New Note Button
         $('#start-new-note-btn').click(function() {
             if(confirm('Start a new note? This will clear the current form.')) {
-                // Clear inputs
-                $('input[name="grower_number"]').val('');
-                $('input[name="first_name"]').val('');
-                $('input[name="last_name"]').val('');
-                $('input[name="expected_bales"]').val('');
-                $('input[name="barcode"]').val('');
-                $('#scanned-items-body').html('<tr><td colspan="3" class="px-2 py-2 text-sm text-zinc-500 text-center">No items scanned yet.</td></tr>');
-                // You might want to unset the value of printing_note in context via full reload or AJAX
-                // For now, client-side clear is fine, next "Save" will create a new note if logic allows, 
-                // OR we need to signal backend to create new note.
-                // Simple approach: reload page or use a query param ?new_note=true
-                window.location.href = window.location.pathname + '?new_session=true';
+                // Save current details before navigating away
+                const noteId = $('#printing-note-id').val();
+                if (noteId) {
+                    saveNoteDetails(function() {
+                        window.location.href = window.location.pathname + '?new_session=true';
+                    });
+                } else {
+                    window.location.href = window.location.pathname + '?new_session=true';
+                }
             }
         });
 

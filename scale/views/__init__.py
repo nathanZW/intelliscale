@@ -92,6 +92,7 @@ from .printing import (
     printing_note_detail,
     printing_note_delete,
     reactivate_printing_note,
+    update_printing_note_details,
     printing_record_delete,
     printing_note_export_xlsx,
 )

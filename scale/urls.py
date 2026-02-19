@@ -68,6 +68,7 @@ urlpatterns = [
     path('printing-station/notes/<int:pk>/', views.printing_note_detail, name='printing_note_detail'),
     path('printing-station/notes/<int:pk>/delete/', views.printing_note_delete, name='printing_note_delete'),
     path('printing-station/notes/<int:pk>/reactivate/', views.reactivate_printing_note, name='printing_note_reactivate'),
+    path('printing-station/update-details/', views.update_printing_note_details, name='update_printing_note_details'),
     path('printing-station/records/<int:pk>/delete/', views.printing_record_delete, name='printing_record_delete'),
     path('printing-station/notes/<int:pk>/export/', views.printing_note_export_xlsx, name='printing_note_export_xlsx'),
     path('printing-station/lookup-grower/', views.lookup_grower, name='lookup_grower'),
