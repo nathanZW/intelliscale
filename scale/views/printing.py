@@ -66,12 +66,9 @@ def printing_station(request):
                 expected_bales=total_bales if total_bales else None
             )
         else:
-            # Maybe update grower info if changed? 
-            # Requirements didn't specify, but usually user might correct a name.
-            # Let's update it.
-            if grower_number: printing_note.grower_number = grower_number
-            if first_name: printing_note.first_name = first_name
-            if last_name: printing_note.last_name = last_name
+            printing_note.grower_number = grower_number or ''
+            printing_note.first_name = first_name or ''
+            printing_note.last_name = last_name or ''
             if total_bales is not None: printing_note.expected_bales = total_bales if total_bales else None
             printing_note.save() # Updates updated_at
             
