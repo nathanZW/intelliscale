@@ -5,7 +5,7 @@ Handles local printing station operations, printing notes, and records.
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from ..models import Scale, Product, PrintingNote, PrintingRecord
@@ -66,12 +66,9 @@ def printing_station(request):
                 expected_bales=total_bales if total_bales else None
             )
         else:
-            # Maybe update grower info if changed? 
-            # Requirements didn't specify, but usually user might correct a name.
-            # Let's update it.
-            if grower_number: printing_note.grower_number = grower_number
-            if first_name: printing_note.first_name = first_name
-            if last_name: printing_note.last_name = last_name
+            printing_note.grower_number = grower_number or ''
+            printing_note.first_name = first_name or ''
+            printing_note.last_name = last_name or ''
             if total_bales is not None: printing_note.expected_bales = total_bales if total_bales else None
             printing_note.save() # Updates updated_at
             
@@ -247,6 +244,32 @@ def reactivate_printing_note(request, pk):
     
     messages.success(request, f'Printing Note #{note.id} reactivated.')
     return redirect('scale:printing_station')
+
+
+@login_required
+def update_printing_note_details(request):
+    """
+    AJAX endpoint to save printing note details without requiring a barcode scan.
+    """
+    if request.method == 'POST':
+        note_id = request.POST.get('printing_note_id')
+        if not note_id:
+            return JsonResponse({'success': False, 'message': 'No note ID provided'})
+
+        try:
+            note = PrintingNote.objects.get(pk=note_id, user=request.user)
+        except PrintingNote.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Note not found'})
+
+        note.grower_number = request.POST.get('grower_number', '')
+        note.first_name = request.POST.get('first_name', '')
+        note.last_name = request.POST.get('last_name', '')
+        expected_bales = request.POST.get('expected_bales')
+        note.expected_bales = expected_bales if expected_bales else None
+        note.save()
+        return JsonResponse({'success': True, 'message': 'Details saved successfully'})
+
+    return JsonResponse({'success': False, 'message': 'Invalid request method'})
 
 
 @login_required
