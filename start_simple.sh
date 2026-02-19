@@ -3,7 +3,7 @@
 # Simple IntelliScale Startup Script - Shows logs in terminal
 # Use this for development when you want to see logs directly
 
-PROJECT_DIR="/home/nathan/Documents/eport/intelliscale"
+PROJECT_DIR=$(pwd)  #Uses current directory automatically than it being hardcoded for a specific directory just in case another dev hops onto the project
 VENV_PATH="$PROJECT_DIR/.venv"
 
 # Colors

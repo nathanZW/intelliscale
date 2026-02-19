@@ -30,6 +30,7 @@ static/collected/
 
 # Virtual Environment
 venv/
+.venv/
 my_venv/
 ENV/
 .env

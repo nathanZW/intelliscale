@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Configuration
-PROJECT_DIR="/home/nathan/Documents/eport/intelliscale"
+PROJECT_DIR=$(pwd) #Uses current directory automatically than it being hardcoded for a specific directory just in case another dev hops onto the project
 VENV_PATH="$PROJECT_DIR/.venv"  # Adjust this to your virtual environment path
 LOG_DIR="$PROJECT_DIR/logs"
 DJANGO_PORT=8000
