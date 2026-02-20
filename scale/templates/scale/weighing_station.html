@@ -136,12 +136,13 @@
                     </div>
 
                     <script>
-                        document.getElementById('barcode-input').addEventListener('keydown', function(event) {
-                            if (event.key === 'Enter') {
-                                event.preventDefault();
-                                return false;
-                            }
-                        });
+                            document.getElementById('barcode-input').addEventListener('keydown', function (event) {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault(); // Prevent default form submission to handle it manually if needed, or just let it submit
+                                    // Trigger the save button click
+                                    document.getElementById('save-btn').click();
+                                }
+                            });
                         </script>
 
                     <div id="custom-fields-container" class="space-y-4 hidden mt-6 mb-6">
