@@ -1,191 +1,172 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Create User | IntelliScale</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                }
-            }
-        }
-    </script>
-</head>
-<body class="bg-zinc-50 min-h-screen">
-    <div class="max-w-3xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center mb-6">
-            <a href="{% url 'users:user_list' %}" class="mr-4 text-zinc-500 hover:text-zinc-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-                </svg>
-            </a>
-            <h1 class="text-2xl font-semibold text-zinc-900">Create New User</h1>
-        </div>
+{% extends "scale/base.html" %}
 
-        <div class="bg-white shadow rounded-lg overflow-hidden">
-            <div class="p-6">
-                <form method="post" class="space-y-6">
-                    {% csrf_token %}
+{% block title %}Create User | IntelliScale{% endblock %}
 
-                    {% if form.non_field_errors %}
-                        <div class="bg-red-50 border border-red-200 text-red-600 text-sm rounded-md p-4 mb-6">
-                            {% for error in form.non_field_errors %}
-                                <p>{{ error }}</p>
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="flex items-center mb-6">
+        <a href="{% url 'users:user_list' %}" class="mr-4 text-zinc-500 hover:text-zinc-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+            </svg>
+        </a>
+        <h1 class="text-2xl font-semibold text-zinc-900">Create New User</h1>
+    </div>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="bg-red-50 border border-red-200 text-red-600 text-sm rounded-md p-4 mb-6">
+                        {% for error in form.non_field_errors %}
+                            <p>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Username -->
+                    <div class="space-y-2">
+                        <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-zinc-900">Username</label>
+                        <input 
+                            type="text" 
+                            name="{{ form.username.html_name }}" 
+                            id="{{ form.username.id_for_label }}" 
+                            class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.username.errors %}border-red-500{% endif %}"
+                            value="{{ form.username.value|default:'' }}"
+                        >
+                        {% if form.username.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.username.errors|striptags }}</p>
+                        {% endif %}
+                        {% if form.username.help_text %}
+                            <p class="text-zinc-500 text-xs mt-1">{{ form.username.help_text }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Email -->
+                    <div class="space-y-2">
+                        <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-zinc-900">Email</label>
+                        <input 
+                            type="email" 
+                            name="{{ form.email.html_name }}" 
+                            id="{{ form.email.id_for_label }}" 
+                            class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.email.errors %}border-red-500{% endif %}"
+                            value="{{ form.email.value|default:'' }}"
+                        >
+                        {% if form.email.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.email.errors|striptags }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- First Name -->
+                    <div class="space-y-2">
+                        <label for="{{ form.first_name.id_for_label }}" class="block text-sm font-medium text-zinc-900">First Name</label>
+                        <input 
+                            type="text" 
+                            name="{{ form.first_name.html_name }}" 
+                            id="{{ form.first_name.id_for_label }}" 
+                            class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.first_name.errors %}border-red-500{% endif %}"
+                            value="{{ form.first_name.value|default:'' }}"
+                        >
+                        {% if form.first_name.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.first_name.errors|striptags }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Last Name -->
+                    <div class="space-y-2">
+                        <label for="{{ form.last_name.id_for_label }}" class="block text-sm font-medium text-zinc-900">Last Name</label>
+                        <input 
+                            type="text" 
+                            name="{{ form.last_name.html_name }}" 
+                            id="{{ form.last_name.id_for_label }}" 
+                            class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.last_name.errors %}border-red-500{% endif %}"
+                            value="{{ form.last_name.value|default:'' }}"
+                        >
+                        {% if form.last_name.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.last_name.errors|striptags }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Password -->
+                    <div class="space-y-2">
+                        <label for="{{ form.password1.id_for_label }}" class="block text-sm font-medium text-zinc-900">Password</label>
+                        <input 
+                            type="password" 
+                            name="{{ form.password1.html_name }}" 
+                            id="{{ form.password1.id_for_label }}" 
+                            class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.password1.errors %}border-red-500{% endif %}"
+                        >
+                        {% if form.password1.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.password1.errors|striptags }}</p>
+                        {% endif %}
+                        {% if form.password1.help_text %}
+                            <p class="text-zinc-500 text-xs mt-1">{{ form.password1.help_text }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Confirm Password -->
+                    <div class="space-y-2">
+                        <label for="{{ form.password2.id_for_label }}" class="block text-sm font-medium text-zinc-900">Confirm Password</label>
+                        <input 
+                            type="password" 
+                            name="{{ form.password2.html_name }}" 
+                            id="{{ form.password2.id_for_label }}" 
+                            class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.password2.errors %}border-red-500{% endif %}"
+                        >
+                        {% if form.password2.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.password2.errors|striptags }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Role -->
+                    <div class="space-y-2">
+                        <label for="{{ form.role.id_for_label }}" class="block text-sm font-medium text-zinc-900">Role</label>
+                        <select 
+                            name="{{ form.role.html_name }}" 
+                            id="{{ form.role.id_for_label }}" 
+                            class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.role.errors %}border-red-500{% endif %}"
+                        >
+                            {% for choice in form.role.field.choices %}
+                                <option value="{{ choice.0 }}" {% if form.role.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
                             {% endfor %}
-                        </div>
-                    {% endif %}
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Username -->
-                        <div class="space-y-2">
-                            <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-zinc-900">Username</label>
-                            <input 
-                                type="text" 
-                                name="{{ form.username.html_name }}" 
-                                id="{{ form.username.id_for_label }}" 
-                                class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.username.errors %}border-red-500{% endif %}"
-                                value="{{ form.username.value|default:'' }}"
-                            >
-                            {% if form.username.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.username.errors|striptags }}</p>
-                            {% endif %}
-                            {% if form.username.help_text %}
-                                <p class="text-zinc-500 text-xs mt-1">{{ form.username.help_text }}</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- Email -->
-                        <div class="space-y-2">
-                            <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-zinc-900">Email</label>
-                            <input 
-                                type="email" 
-                                name="{{ form.email.html_name }}" 
-                                id="{{ form.email.id_for_label }}" 
-                                class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.email.errors %}border-red-500{% endif %}"
-                                value="{{ form.email.value|default:'' }}"
-                            >
-                            {% if form.email.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.email.errors|striptags }}</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- First Name -->
-                        <div class="space-y-2">
-                            <label for="{{ form.first_name.id_for_label }}" class="block text-sm font-medium text-zinc-900">First Name</label>
-                            <input 
-                                type="text" 
-                                name="{{ form.first_name.html_name }}" 
-                                id="{{ form.first_name.id_for_label }}" 
-                                class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.first_name.errors %}border-red-500{% endif %}"
-                                value="{{ form.first_name.value|default:'' }}"
-                            >
-                            {% if form.first_name.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.first_name.errors|striptags }}</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- Last Name -->
-                        <div class="space-y-2">
-                            <label for="{{ form.last_name.id_for_label }}" class="block text-sm font-medium text-zinc-900">Last Name</label>
-                            <input 
-                                type="text" 
-                                name="{{ form.last_name.html_name }}" 
-                                id="{{ form.last_name.id_for_label }}" 
-                                class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.last_name.errors %}border-red-500{% endif %}"
-                                value="{{ form.last_name.value|default:'' }}"
-                            >
-                            {% if form.last_name.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.last_name.errors|striptags }}</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- Password -->
-                        <div class="space-y-2">
-                            <label for="{{ form.password1.id_for_label }}" class="block text-sm font-medium text-zinc-900">Password</label>
-                            <input 
-                                type="password" 
-                                name="{{ form.password1.html_name }}" 
-                                id="{{ form.password1.id_for_label }}" 
-                                class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.password1.errors %}border-red-500{% endif %}"
-                            >
-                            {% if form.password1.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.password1.errors|striptags }}</p>
-                            {% endif %}
-                            {% if form.password1.help_text %}
-                                <p class="text-zinc-500 text-xs mt-1">{{ form.password1.help_text }}</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- Confirm Password -->
-                        <div class="space-y-2">
-                            <label for="{{ form.password2.id_for_label }}" class="block text-sm font-medium text-zinc-900">Confirm Password</label>
-                            <input 
-                                type="password" 
-                                name="{{ form.password2.html_name }}" 
-                                id="{{ form.password2.id_for_label }}" 
-                                class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.password2.errors %}border-red-500{% endif %}"
-                            >
-                            {% if form.password2.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.password2.errors|striptags }}</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- Role -->
-                        <div class="space-y-2">
-                            <label for="{{ form.role.id_for_label }}" class="block text-sm font-medium text-zinc-900">Role</label>
-                            <select 
-                                name="{{ form.role.html_name }}" 
-                                id="{{ form.role.id_for_label }}" 
-                                class="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 {% if form.role.errors %}border-red-500{% endif %}"
-                            >
-                                {% for choice in form.role.field.choices %}
-                                    <option value="{{ choice.0 }}" {% if form.role.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
-                                {% endfor %}
-                            </select>
-                            {% if form.role.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.role.errors|striptags }}</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- Is Active -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-medium text-zinc-900">Account Status</label>
-                            <div class="flex items-center">
-                                <input 
-                                    type="checkbox" 
-                                    name="{{ form.is_active.html_name }}" 
-                                    id="{{ form.is_active.id_for_label }}" 
-                                    class="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-600"
-                                    {% if form.is_active.value %}checked{% endif %}
-                                >
-                                <label for="{{ form.is_active.id_for_label }}" class="ml-2 block text-sm text-zinc-700">Active</label>
-                            </div>
-                            {% if form.is_active.errors %}
-                                <p class="text-red-500 text-xs mt-1">{{ form.is_active.errors|striptags }}</p>
-                            {% endif %}
-                        </div>
+                        </select>
+                        {% if form.role.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.role.errors|striptags }}</p>
+                        {% endif %}
                     </div>
 
-                    <div class="flex justify-end space-x-4 pt-4">
-                        <a href="{% url 'users:user_list' %}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-100 text-zinc-900 hover:bg-zinc-200 h-10 px-4 py-2">
-                            Cancel
-                        </a>
-                        <button type="submit" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2">
-                            Create User
-                        </button>
+                    <!-- Is Active -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-zinc-900">Account Status</label>
+                        <div class="flex items-center">
+                            <input 
+                                type="checkbox" 
+                                name="{{ form.is_active.html_name }}" 
+                                id="{{ form.is_active.id_for_label }}" 
+                                class="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-600"
+                                {% if form.is_active.value %}checked{% endif %}
+                            >
+                            <label for="{{ form.is_active.id_for_label }}" class="ml-2 block text-sm text-zinc-700">Active</label>
+                        </div>
+                        {% if form.is_active.errors %}
+                            <p class="text-red-500 text-xs mt-1">{{ form.is_active.errors|striptags }}</p>
+                        {% endif %}
                     </div>
-                </form>
-            </div>
+                </div>
+
+                <div class="flex justify-end space-x-4 pt-4">
+                    <a href="{% url 'users:user_list' %}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-100 text-zinc-900 hover:bg-zinc-200 h-10 px-4 py-2">
+                        Cancel
+                    </a>
+                    <button type="submit" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2">
+                        Create User
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
-</body>
-</html> 
+</div>
+{% endblock %} 

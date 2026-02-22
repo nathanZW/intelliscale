@@ -1,120 +1,101 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Add New Product | IntelliScale</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                }
-            }
-        }
-    </script>
-</head>
-<body class="bg-zinc-50 min-h-screen">
-    <div class="max-w-3xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center mb-6">
-            <a href="{% url 'scale:product_list' %}" class="mr-4 text-zinc-500 hover:text-zinc-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-                </svg>
-            </a>
-            <h1 class="text-2xl font-semibold text-zinc-900">Add New Product</h1>
-        </div>
+{% extends "scale/base.html" %}
 
-        {% if messages %}
-            <div class="mb-6">
-                {% for message in messages %}
-                    <div class="bg-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-50 border border-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-200 text-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-600 text-sm rounded-md p-4 mb-4">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
+{% block title %}Add New Product | IntelliScale{% endblock %}
 
-        <div class="bg-white shadow rounded-lg overflow-hidden">
-            <form method="post" class="p-6 space-y-6">
-                {% csrf_token %}
-                
-                <div class="grid grid-cols-1 gap-6">
-                    <!-- Name -->
-                    <div>
-                        <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-zinc-700">Product Name</label>
-                        <div class="mt-1">
-                            {{ form.name }}
-                        </div>
-                        {% if form.name.errors %}
-                            <p class="mt-2 text-sm text-red-600">{{ form.name.errors }}</p>
-                        {% endif %}
-                    </div>
-
-                    <!-- Description -->
-                    <div>
-                        <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-zinc-700">Description</label>
-                        <div class="mt-1">
-                            {{ form.description }}
-                        </div>
-                        {% if form.description.errors %}
-                            <p class="mt-2 text-sm text-red-600">{{ form.description.errors }}</p>
-                        {% endif %}
-                        <p class="mt-1 text-xs text-zinc-500">Provide a detailed description of this product.</p>
-                    </div>
-
-                    <!-- ERP Product ID -->
-                    <div>
-                        <label for="{{ form.erp_product_id.id_for_label }}" class="block text-sm font-medium text-zinc-700">ERP Product ID</label>
-                        <div class="mt-1">
-                            {{ form.erp_product_id }}
-                        </div>
-                        {% if form.erp_product_id.errors %}
-                            <p class="mt-2 text-sm text-red-600">{{ form.erp_product_id.errors }}</p>
-                        {% endif %}
-                        <p class="mt-1 text-xs text-zinc-500">Optional: Product identifier from your ERP system for future sync.</p>
-                    </div>
-
-                    <!-- Tare Weight -->
-                    <div>
-                        <label for="{{ form.tare_weight.id_for_label }}" class="block text-sm font-medium text-zinc-700">Tare Weight</label>
-                        <div class="mt-1">
-                            {{ form.tare_weight }}
-                        </div>
-                        {% if form.tare_weight.errors %}
-                            <p class="mt-2 text-sm text-red-600">{{ form.tare_weight.errors }}</p>
-                        {% endif %}
-                        <p class="mt-1 text-xs text-zinc-500">Tare weight of the product.</p>
-                    </div>
-
-                    <!-- Status -->
-                    <div>
-                        <div class="flex items-center mt-1">
-                            {{ form.is_active }}
-                            <label for="{{ form.is_active.id_for_label }}" class="ml-2 block text-sm font-medium text-zinc-700">Active</label>
-                        </div>
-                        {% if form.is_active.errors %}
-                            <p class="mt-2 text-sm text-red-600">{{ form.is_active.errors }}</p>
-                        {% endif %}
-                    </div>
-                </div>
-                
-                <div class="mt-6 flex justify-end space-x-3">
-                    <a href="{% url 'scale:product_list' %}" class="inline-flex justify-center rounded-md border border-zinc-300 bg-white py-2 px-4 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                        Cancel
-                    </a>
-                    <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-zinc-900 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                        Add Product
-                    </button>
-                </div>
-            </form>
-        </div>
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="flex items-center mb-6">
+        <a href="{% url 'scale:product_list' %}" class="mr-4 text-zinc-500 hover:text-zinc-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+            </svg>
+        </a>
+        <h1 class="text-2xl font-semibold text-zinc-900">Add New Product</h1>
     </div>
-</body>
-</html> 
+
+    {% if messages %}
+        <div class="mb-6">
+            {% for message in messages %}
+                <div class="bg-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-50 border border-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-200 text-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-600 text-sm rounded-md p-4 mb-4">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <form method="post" class="p-6 space-y-6">
+            {% csrf_token %}
+            
+            <div class="grid grid-cols-1 gap-6">
+                <!-- Name -->
+                <div>
+                    <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-zinc-700">Product Name</label>
+                    <div class="mt-1">
+                        {{ form.name }}
+                    </div>
+                    {% if form.name.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.name.errors }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-zinc-700">Description</label>
+                    <div class="mt-1">
+                        {{ form.description }}
+                    </div>
+                    {% if form.description.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.description.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">Provide a detailed description of this product.</p>
+                </div>
+
+                <!-- ERP Product ID -->
+                <div>
+                    <label for="{{ form.erp_product_id.id_for_label }}" class="block text-sm font-medium text-zinc-700">ERP Product ID</label>
+                    <div class="mt-1">
+                        {{ form.erp_product_id }}
+                    </div>
+                    {% if form.erp_product_id.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.erp_product_id.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">Optional: Product identifier from your ERP system for future sync.</p>
+                </div>
+
+                <!-- Tare Weight -->
+                <div>
+                    <label for="{{ form.tare_weight.id_for_label }}" class="block text-sm font-medium text-zinc-700">Tare Weight</label>
+                    <div class="mt-1">
+                        {{ form.tare_weight }}
+                    </div>
+                    {% if form.tare_weight.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.tare_weight.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">Tare weight of the product.</p>
+                </div>
+
+                <!-- Status -->
+                <div>
+                    <div class="flex items-center mt-1">
+                        {{ form.is_active }}
+                        <label for="{{ form.is_active.id_for_label }}" class="ml-2 block text-sm font-medium text-zinc-700">Active</label>
+                    </div>
+                    {% if form.is_active.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.is_active.errors }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end space-x-3">
+                <a href="{% url 'scale:product_list' %}" class="inline-flex justify-center rounded-md border border-zinc-300 bg-white py-2 px-4 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Cancel
+                </a>
+                <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-zinc-900 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Add Product
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %} 

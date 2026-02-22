@@ -1,14 +1,14 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Dashboard</title>
-</head>
-<body>
-    <h1>Welcome, {{ username }}! (Role: {{ user.get_role_display }})</h1>
-    <p>You are logged in. This is a default dashboard.</p>
-    <form method="post" action="{% url 'users:logout' %}">
-        {% csrf_token %}
-        <button type="submit">Logout</button>
-    </form>
-</body>
-</html>
+{% extends "scale/base.html" %}
+
+{% block title %}Dashboard | IntelliScale{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+        <div class="p-6">
+            <h1 class="text-2xl font-semibold text-zinc-900 mb-4">Welcome, {{ username }}! (Role: {{ user.get_role_display }})</h1>
+            <p class="text-zinc-600 mb-8">You are logged in. This is a default dashboard.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
