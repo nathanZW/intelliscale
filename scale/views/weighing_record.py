@@ -28,6 +28,7 @@ def weighing_record_list(request):
     product_id = request.GET.get('product')
     process_id = request.GET.get('process')
     barcode = request.GET.get('barcode')
+    sync_status = request.GET.get('sync_status')
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     sort_param = request.GET.get('sort', '-timestamp')  # Default sort by timestamp desc
@@ -47,6 +48,11 @@ def weighing_record_list(request):
     
     if barcode:
         records = records.filter(barcode__icontains=barcode)
+    
+    if sync_status == 'unsynced':
+        records = records.filter(is_synced=False)
+    elif sync_status == 'synced':
+        records = records.filter(is_synced=True)
     
     # Date range filtering
     if date_from:
@@ -172,6 +178,7 @@ def export_weighing_records(request):
     product_id = request.GET.get('product')
     process_id = request.GET.get('process')
     barcode = request.GET.get('barcode')
+    sync_status = request.GET.get('sync_status')
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     sort_param = request.GET.get('sort', '-timestamp')
@@ -192,6 +199,11 @@ def export_weighing_records(request):
     
     if barcode:
         records = records.filter(barcode__icontains=barcode)
+    
+    if sync_status == 'unsynced':
+        records = records.filter(is_synced=False)
+    elif sync_status == 'synced':
+        records = records.filter(is_synced=True)
     
     # Date range filtering
     if date_from:
