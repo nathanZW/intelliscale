@@ -25,6 +25,7 @@ urlpatterns = [
     path('weighing-records/<int:pk>/print/', views.print_weighing_record, name='print_weighing_record'),
     path('weighing-records/<int:pk>/edit/', views.weighing_record_edit, name='weighing_record_edit'),
     path('weighing-records/<int:pk>/delete/', views.weighing_record_delete, name='weighing_record_delete'),
+    path('weighing-records/bulk-delete/', views.weighing_record_bulk_delete, name='weighing_record_bulk_delete'),
     path('weighing-records/export/', views.export_weighing_records, name='export_weighing_records'),
     
     # Weighing Process URLs

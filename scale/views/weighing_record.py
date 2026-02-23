@@ -17,6 +17,7 @@ from ..models import (
 from datetime import datetime, timedelta, time
 from decimal import Decimal
 import csv
+import json
 from io import BytesIO
 
 
@@ -166,6 +167,37 @@ def weighing_record_delete(request, pk):
     
     # If not POST, redirect to detail page
     return redirect('scale:weighing_record_detail', pk=pk)
+
+
+@login_required
+@user_passes_test(is_admin)
+def weighing_record_bulk_delete(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            record_ids = data.get('record_ids', [])
+            password = data.get('password', '')
+            
+            if not record_ids:
+                return JsonResponse({'success': False, 'message': 'No records selected.'})
+                
+            if not password:
+                return JsonResponse({'success': False, 'message': 'Password is required.'})
+                
+            # Verify the user's password using the check_password method
+            if not request.user.check_password(password):
+                return JsonResponse({'success': False, 'message': 'Incorrect password.'})
+                
+            # Perform deletion
+            deleted_count, _ = WeighingRecord.objects.filter(id__in=record_ids).delete()
+            return JsonResponse({'success': True, 'message': f'Successfully deleted {deleted_count} records.'})
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'Invalid JSON data.'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': f'Error details: {str(e)}'})
+            
+    return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=405)
 
 
 #################################################################################################

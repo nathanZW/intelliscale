@@ -69,6 +69,7 @@ from .weighing_record import (
     weighing_record_detail,
     weighing_record_edit,
     weighing_record_delete,
+    weighing_record_bulk_delete,
     print_weighing_record,
     export_weighing_records,
     export_records_to_csv,
