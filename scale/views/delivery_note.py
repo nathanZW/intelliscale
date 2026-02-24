@@ -162,14 +162,14 @@ def recall_delivery_note(request, pk):
             else:
                 error_msg = data.get('message', 'Unknown error from external API')
                 messages.error(request, f"Failed to recall delivery note: {error_msg}")
-                logger.error(f"Failed to recall delivery note {delivery_note.delivery_note_number}: {error_msg}")
+                logger.error('Failed to recall delivery note %s: %s', delivery_note.delivery_note_number, error_msg)
                 
         except requests.RequestException as e:
             messages.error(request, f"Network error while recalling delivery note: {str(e)}")
-            logger.error(f"Network error recalling delivery note {delivery_note.delivery_note_number}: {e}")
+            logger.error('Network error recalling delivery note %s: %s', delivery_note.delivery_note_number, e)
         except Exception as e:
             messages.error(request, f"An unexpected error occurred: {str(e)}")
-            logger.error(f"Unexpected error recalling delivery note {delivery_note.delivery_note_number}: {e}")
+            logger.exception('Unexpected error recalling delivery note %s', delivery_note.delivery_note_number)
             
     return redirect('scale:delivery_note_detail', pk=pk)
 
@@ -203,13 +203,13 @@ def delivery_note_suspend(request, pk):
 def manual_sync_delivery_notes(request):
     """Manually trigger Odoo delivery note sync"""
     if request.method == 'POST':
-        print(f"[SYNC] Manual delivery note sync triggered by user: {request.user}")
+        logger.info('[SYNC] Manual delivery note sync triggered by user: %s', request.user)
         try:
             # Check if another sync is already running by checking the same lock
             lock_id = "sync_odoo_delivery_notes_lock"
             if cache.get(lock_id):
                 # Another sync is already running
-                print("[SYNC] Skip: Another sync is already running.")
+                logger.info('[SYNC] Skip: Another sync is already running.')
                 return JsonResponse({
                     'success': False,
                     'message': 'Another sync is currently running, please wait for it to complete.'
@@ -217,7 +217,7 @@ def manual_sync_delivery_notes(request):
 
             # Call the sync task asynchronously
             task_result = sync_odoo_delivery_notes.delay()
-            print(f"[SYNC] Task initiated successfully. Task ID: {task_result.id}")
+            logger.info('[SYNC] Task initiated successfully. Task ID: %s', task_result.id)
 
             # Return success response
             return JsonResponse({
@@ -226,7 +226,7 @@ def manual_sync_delivery_notes(request):
                 'task_id': str(task_result.id)  # Include task ID for potential tracking
             })
         except Exception as e:
-            print(f"[SYNC] Error initiating sync: {str(e)}")
+            logger.exception('[SYNC] Error initiating sync')
             return JsonResponse({
                 'success': False,
                 'message': f'Error initiating sync: {str(e)}'
@@ -285,19 +285,49 @@ def close_delivery_note(request, pk):
     return JsonResponse({'success': False, 'message': 'Invalid request method.'})
 
 
+
+def _handle_status_update_response(response, delivery_note):
+    '''Helper to handle external API responses for status updates.'''
+    if response.status_code in [200, 201]:
+        try:
+            response_json = response.json()
+            if isinstance(response_json, dict) and response_json.get('success') is False:
+                error_message = response_json.get('message', response.text)
+                logger.error('Odoo API returned success=false for delivery note %s. Error: %s', delivery_note.delivery_note_number, error_message)
+                return False
+            else:
+                logger.info("Successfully updated Odoo status to 'laid' for delivery note %s", delivery_note.delivery_note_number)
+                return True
+        except ValueError:
+            logger.info("Successfully updated Odoo status to 'laid' for delivery note %s (non-JSON response)", delivery_note.delivery_note_number)
+            return True
+    elif response.status_code >= 400:
+        error_message = response.text
+        try:
+            response_json = response.json()
+            if 'error' in response_json and 'data' in response_json['error']:
+                error_message = response_json['error']['data'].get('message', response.text)
+        except (ValueError, KeyError):
+            pass
+        logger.error('Failed to update Odoo status. Status: %s. Error: %s', response.status_code, error_message)
+        return False
+    else:
+        logger.error('Unexpected response from Odoo. Status: %s. Response: %s', response.status_code, response.text)
+        return False
+
 def update_dnote_completion_status_with_api_key(delivery_note):
     """Send a request to Odoo to update the delivery note status to laid, using API key"""
     try:
         # Get company settings for API URL and API key
         company_settings = CompanySettings.objects.first()
         if not company_settings or not company_settings.api_url:
-            logger.error("No company settings found or API URL not configured")
+            logger.error('No company settings found or API URL not configured')
             return False
 
         # Get API key from company settings
         api_key = company_settings.api_key if company_settings and company_settings.api_key else None
         if not api_key:
-            logger.error("API key not configured in company settings")
+            logger.error('API key not configured in company settings')
             return False
 
         url = f"{company_settings.api_url}/api/grower-delivery-notes/update-status"
@@ -316,54 +346,23 @@ def update_dnote_completion_status_with_api_key(delivery_note):
 
         response = requests.request("POST", url, data=payload, headers=headers, params=querystring)
 
-        if response.status_code in [200, 201]:
-            # Check if the response body contains success=false
-            try:
-                response_json = response.json()
-                if isinstance(response_json, dict) and response_json.get('success') is False:
-                    # The API returned 200 but with success=false in the body
-                    error_message = response_json.get('message', response.text)
-                    logger.error(f"Odoo API returned success=false for delivery note {delivery_note.delivery_note_number}. Error: {error_message}")
-                    return False
-                else:
-                    # API call was successful (success is True or not present)
-                    logger.info(f"Successfully updated Odoo status to 'laid' for delivery note {delivery_note.delivery_note_number}")
-                    return True
-            except ValueError:  # JSON decode error
-                # If response is not JSON, assume success for 200/201 status
-                logger.info(f"Successfully updated Odoo status to 'laid' for delivery note {delivery_note.delivery_note_number} (non-JSON response)")
-                return True
-        elif response.status_code >= 400:
-            # Handle client/server error responses
-            error_message = response.text
-            # Try to extract a more user-friendly error message if available
-            try:
-                response_json = response.json()
-                if 'error' in response_json and 'data' in response_json['error']:
-                    error_message = response_json['error']['data'].get('message', response.text)
-            except:
-                pass  # If we can't parse the JSON, use the raw response text
-            logger.error(f"Failed to update Odoo status. Status: {response.status_code}. Error: {error_message}")
-            return False
-        else:
-            # Other status codes that aren't 200/201 but not 400+ errors
-            logger.error(f"Unexpected response from Odoo. Status: {response.status_code}. Response: {response.text}")
-            return False
+        return _handle_status_update_response(response, delivery_note)
 
     except requests.exceptions.ConnectionError as e:
-        logger.error(f"Connection error when updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        logger.error('Connection error when updating Odoo status for %s: %s', delivery_note.delivery_note_number, e)
         return False
     except requests.exceptions.Timeout as e:
-        logger.error(f"Timeout error when updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        logger.error('Timeout error when updating Odoo status for %s: %s', delivery_note.delivery_note_number, e)
         return False
     except requests.exceptions.RequestException as e:
-        logger.error(f"Request error when updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        logger.error('Request error when updating Odoo status for %s: %s', delivery_note.delivery_note_number, e)
         return False
     except Exception as e:
-        logger.error(f"Unexpected error updating Odoo status for {delivery_note.delivery_note_number}: {str(e)}")
+        logger.exception('Unexpected error updating Odoo status for %s', delivery_note.delivery_note_number)
         return False
 
 
+@login_required
 @user_passes_test(is_admin)
 def deactivate_active_delivery_note(request, pk):
     """Deactivate an active delivery note without necessarily closing it completely."""
@@ -486,7 +485,7 @@ def recall_bale(request, pk):
                     "X-API-Key": api_key
                 }
                 
-                print("Making authentication request to:", auth_url)
+                logger.debug('Making authentication request to: %s', auth_url)
                 auth_response = requests.post(auth_url, json=auth_payload, headers=auth_headers, timeout=10)
                 
                 if auth_response.status_code == 200:
@@ -501,7 +500,7 @@ def recall_bale(request, pk):
                             session_id = auth_result['result'].get('session_id')
                             
                         if session_id:
-                            print(f"Successfully authenticated with session ID: {session_id}")
+                            logger.debug('Successfully authenticated with ERP session ID: %s', session_id)
                         else:
                             return JsonResponse({
                                 'success': False,
@@ -509,19 +508,19 @@ def recall_bale(request, pk):
                             })
                     elif 'error' in auth_result:
                         error_message = auth_result['error'].get('data', {}).get('message', 'Unknown authentication error')
-                        print('Authentication error:', error_message)
+                        logger.error('ERP authentication error in recall_bale: %s', error_message)
                         return JsonResponse({
                             'success': False,
                             'message': f'ERP authentication failed: {error_message}'
                         })
                     else:
-                        print('Failed to authenticate - unexpected response format:', auth_response.text)
+                        logger.error('Failed to authenticate in recall_bale - unexpected response format: %s', auth_response.text)
                         return JsonResponse({
                             'success': False,
                             'message': f'ERP authentication failed: Unexpected response format'
                         })
                 else:
-                    print('Failed to authenticate:', auth_response.text)
+                    logger.error('Failed to authenticate in recall_bale, status %s: %s', auth_response.status_code, auth_response.text)
                     return JsonResponse({
                         'success': False,
                         'message': f'ERP authentication failed with status {auth_response.status_code}: {auth_response.text}'
@@ -543,71 +542,44 @@ def recall_bale(request, pk):
             
             response = requests.post(api_url, headers=headers, timeout=10)
             
-            # Check response status codes
-            if response.status_code in [200, 201]:  # Success codes
-                # Success - update local database
-                # Remove barcode from scanned_barcodes
+            def success_action():
                 delivery_note.scanned_barcodes = [b for b in delivery_note.scanned_barcodes if b != barcode]
-                
-                # Decrement scanned_bales_count
                 if delivery_note.scanned_bales_count > 0:
                     delivery_note.scanned_bales_count -= 1
-                
                 delivery_note.save()
-                
-                # Delete the weighing record
                 WeighingRecord.objects.filter(
                     delivery_note=delivery_note,
                     barcode=barcode
                 ).delete()
-                
                 return JsonResponse({
                     'success': True,
                     'message': f'Bale {barcode} has been successfully recalled.',
                     'scanned_count': delivery_note.scanned_bales_count,
                     'total_count': delivery_note.get_bale_count()
                 })
-            elif response.status_code >= 400:
-                # Handle client/server error responses
-                error_message = response.text
-                # Try to extract a more user-friendly error message if available
-                try:
-                    response_json = response.json()
-                    if 'error' in response_json and 'data' in response_json['error']:
-                        error_message = response_json['error']['data'].get('message', response.text)
-                except:
-                    pass  # If we can't parse the JSON, use the raw response text
-                return JsonResponse({
-                    'success': False,
-                    'message': f'Failed to update bale in Odoo. Status: {response.status_code}. Error: {error_message}'
-                })
-            else:
-                # Other status codes that aren't 200/201 but not 400+ errors
-                return JsonResponse({
-                    'success': False,
-                    'message': f'Unexpected response from Odoo. Status: {response.status_code}. Response: {response.text}'
-                })
+                
+            return _handle_external_api_response(response, success_action, delivery_note)
                 
         except requests.exceptions.ConnectionError as e:
-            print(f"Connection error during recall_bale: {str(e)}")
+            logger.error('Connection error during recall_bale: %s', e)
             return JsonResponse({
                 'success': False,
                 'message': f'Connection error communicating with Odoo: {str(e)}'
             })
         except requests.exceptions.Timeout as e:
-            print(f"Timeout error during recall_bale: {str(e)}")
+            logger.error('Timeout error during recall_bale: %s', e)
             return JsonResponse({
                 'success': False,
                 'message': f'Timeout error communicating with Odoo: {str(e)}'
             })
         except requests.RequestException as e:
-            print(f"Request error during recall_bale: {str(e)}")
+            logger.error('Request error during recall_bale: %s', e)
             return JsonResponse({
                 'success': False,
                 'message': f'Error communicating with Odoo: {str(e)}'
             })
         except Exception as e:
-            print(f"Unexpected error in recall_bale: {str(e)}")
+            logger.exception('Unexpected error in recall_bale')
             return JsonResponse({
                 'success': False,
                 'message': f'Unexpected error: {str(e)}'
@@ -617,6 +589,36 @@ def recall_bale(request, pk):
         'success': False,
         'message': 'Invalid request method.'
     })
+
+
+def _handle_external_api_response(response, success_action, delivery_note):
+    """Helper to handle external API responses and format the JsonResponse."""
+    if response.status_code in [200, 201]:
+        try:
+            response_json = response.json()
+            if isinstance(response_json, dict) and response_json.get('success') is False:
+                error_message = response_json.get('message', 'External API returned failure.')
+                return JsonResponse({'success': False, 'message': error_message})
+        except ValueError:
+            pass
+            
+        return success_action()
+    elif response.status_code >= 400:
+        error_message = f"API Error {response.status_code}: {response.text}"
+        try:
+            response_json = response.json()
+            if isinstance(response_json, dict) and 'message' in response_json:
+                error_message = response_json['message']
+            elif 'error' in response_json and 'data' in response_json['error']:
+                error_message = response_json['error']['data'].get('message', response.text)
+        except (ValueError, KeyError):
+            pass
+        return JsonResponse({'success': False, 'message': error_message})
+    else:
+        return JsonResponse({
+            'success': False,
+            'message': f'Unexpected response from Odoo. Status: {response.status_code}. Response: {response.text}'
+        })
 
 
 @login_required
@@ -658,75 +660,41 @@ def close_commercial_delivery_note(request, pk):
             "X-API-Key": api_key
         }
         
-        print(f"Calling close-marshalled-at-scale with params: {params}")
+        logger.debug('Calling close-marshalled-at-scale with params: %s', params)
         
         # Make the API call
         response = requests.post(url, params=params, headers=headers, timeout=10)
         
-        print(f"close-marshalled-at-scale response status: {response.status_code}")
-        print(f"close-marshalled-at-scale response text: {response.text}")
+        logger.debug('close-marshalled-at-scale response status: %s', response.status_code)
+        logger.debug('close-marshalled-at-scale response text: %s', response.text)
         
-        if response.status_code in [200, 201]:
-            try:
-                response_json = response.json()
-                
-                # Check for success flag in response body if present
-                if isinstance(response_json, dict):
-                    if response_json.get('success') is False:
-                        return JsonResponse({
-                            'success': False,
-                            'message': response_json.get('message', 'External API returned failure.')
-                        })
-                
-                # If successful, close the delivery note locally
-                delivery_note.status = 'Closed'
-                delivery_note.is_being_scanned = False
-                delivery_note.save()
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': f'Delivery note {delivery_note.delivery_note_number} closed successfully.'
-                })
-                
-            except ValueError:
-                # If response is not JSON but status is 200, assume success
-                delivery_note.status = 'Closed'
-                delivery_note.is_being_scanned = False
-                delivery_note.save()
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': f'Delivery note {delivery_note.delivery_note_number} closed successfully.'
-                })
-        else:
-            # Handle error status codes
-            error_message = f"API Error {response.status_code}: {response.text}"
-            try:
-                response_json = response.json()
-                if isinstance(response_json, dict) and 'message' in response_json:
-                    error_message = response_json['message']
-            except:
-                pass
-                
+        def success_action():
+            # If successful, close the delivery note locally
+            delivery_note.status = 'Closed'
+            delivery_note.is_being_scanned = False
+            delivery_note.save()
+            
             return JsonResponse({
-                'success': False,
-                'message': error_message
+                'success': True,
+                'message': f'Delivery note {delivery_note.delivery_note_number} closed successfully.'
             })
             
+        return _handle_external_api_response(response, success_action, delivery_note)
+            
     except requests.Timeout as e:
-        print(f"Timeout error during close_commercial_delivery_note: {str(e)}")
+        logger.error('Timeout error during close_commercial_delivery_note: %s', e)
         return JsonResponse({
             'success': False,
             'message': f'Timeout error communicating with external API: {str(e)}'
         })
     except requests.RequestException as e:
-        print(f"Request error during close_commercial_delivery_note: {str(e)}")
+        logger.error('Request error during close_commercial_delivery_note: %s', e)
         return JsonResponse({
             'success': False,
             'message': f'Error communicating with external API: {str(e)}'
         })
     except Exception as e:
-        print(f"Unexpected error in close_commercial_delivery_note: {str(e)}")
+        logger.exception('Unexpected error in close_commercial_delivery_note')
         return JsonResponse({
             'success': False,
             'message': f'Unexpected error: {str(e)}'
@@ -1046,9 +1014,10 @@ def get_delivery_note_record(request, delivery_note_id):
         })
         
     except Exception as e:
+        logger.exception('Unexpected error in get_delivery_note_record for delivery_note_id=%s', delivery_note_id)
         return JsonResponse({
             'success': False,
-            'message': str(e)
+            'message': 'An unexpected error occurred.'
         })
 
 
