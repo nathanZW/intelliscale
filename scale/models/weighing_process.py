@@ -26,6 +26,7 @@ class WeighingProcess(models.Model):
     allow_spaces_in_barcode = models.BooleanField(default=False, help_text="If enabled, spaces in barcodes will not be stripped (e.g. for Code 39 Mod 43)")
     use_code39_mod43_validation = models.BooleanField(default=False, help_text="If enabled, validates scanned barcodes using Code 39 Mod 43 algorithm.")
     rolling_hessian = models.BooleanField(default=False, help_text="If enabled, pre-populates the hessian value from the previous weighing record for the same delivery note.")
+    auto_save_on_scan = models.BooleanField(default=False, help_text="If enabled, scanning a barcode will automatically trigger a save.")
     
     def __str__(self):
         return self.name

@@ -427,11 +427,13 @@ def weighing_station(request):
     process_allow_spaces_in_barcode = {}
     process_use_code39_mod43_validation = {}
     process_rolling_hessian_config = {}
+    process_auto_save_on_scan = {}
     for process in processes:
         process_allow_bale_insert[process.id] = process.allow_bale_insert
         process_allow_spaces_in_barcode[process.id] = process.allow_spaces_in_barcode
         process_use_code39_mod43_validation[process.id] = process.use_code39_mod43_validation
         process_rolling_hessian_config[process.id] = process.rolling_hessian
+        process_auto_save_on_scan[process.id] = process.auto_save_on_scan
 
     # Rolling Hessian Logic
     prefilled_hessian_value = ''
@@ -460,6 +462,7 @@ def weighing_station(request):
         'process_allow_spaces_in_barcode': json.dumps(process_allow_spaces_in_barcode),
         'process_use_code39_mod43_validation': json.dumps(process_use_code39_mod43_validation),
         'process_rolling_hessian_config': json.dumps(process_rolling_hessian_config),
+        'process_auto_save_on_scan': json.dumps(process_auto_save_on_scan),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
         'active_delivery_note': active_delivery_note,

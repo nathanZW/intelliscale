@@ -257,7 +257,22 @@
                     {% if form.rolling_hessian.errors %}
                     <p class="mt-2 text-sm text-red-600">{{ form.rolling_hessian.errors }}</p>
                     {% endif %}
-                    <p class="mt-1 text-xs text-zinc-500">If enabled, pre-populates the hessian value from the previous weighing record for the same delivery note.</p>
+                    <p class="mt-1 text-xs text-zinc-500">If enabled, pre-populates the hessian value from the previous
+                        weighing record for the same delivery note.</p>
+                </div>
+
+                <!-- Auto-Save on Scan -->
+                <div>
+                    <label for="{{ form.auto_save_on_scan.id_for_label }}"
+                        class="block text-sm font-medium text-zinc-700">Auto-Save on Scan</label>
+                    <div class="mt-1">
+                        {{ form.auto_save_on_scan }}
+                    </div>
+                    {% if form.auto_save_on_scan.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.auto_save_on_scan.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">If enabled, automatically saves the weighing record when a
+                        barcode is scanned and Enter is pressed.</p>
                 </div>
 
                 <!-- Status -->
