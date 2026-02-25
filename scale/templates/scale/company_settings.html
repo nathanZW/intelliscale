@@ -136,20 +136,6 @@
                     {% endif %}
                 </div>
 
-                <!-- Satellite -->
-                <div class="flex items-start">
-                    <div class="flex items-center h-5">
-                        {{ form.satellite }}
-                    </div>
-                    <div class="ml-2">
-                        <label for="{{ form.satellite.id_for_label }}" class="block text-sm text-gray-900">Satellite</label>
-                        <p class="text-xs text-gray-500">Always try to get weight regardless of which page the user is on</p>
-                    </div>
-                    {% if form.satellite.errors %}
-                        <p class="mt-2 text-sm text-red-600">{{ form.satellite.errors }}</p>
-                    {% endif %}
-                </div>
-
                 <!-- Is Active -->
                 <div class="flex items-center">
                     {{ form.is_active }}
