@@ -293,6 +293,32 @@ def get_current_weight_api(request, scale_id):
                 'message': f'Scale not found with scale_id: {scale_id}'
             }, status=404)
         
+        # Check if satellite mode is enabled — return cached weight from file
+        from ..models import CompanySettings
+        from ..satellite_service import get_cached_weight_by_scale_id
+        
+        settings = CompanySettings.objects.first()
+        
+        if settings and settings.satellite:
+            cached = get_cached_weight_by_scale_id(str(scale_id))
+            if cached:
+                return JsonResponse({
+                    'success': True,
+                    'weight': cached['weight'],
+                    'unit': cached['unit'],
+                    'scale_id': cached.get('scale_id'),
+                    'scale_name': cached.get('scale_name'),
+                    'source': 'satellite_cache',
+                    'cache_age_seconds': round(time.time() - cached['timestamp'], 2)
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'No cached weight available for scale_id: {scale_id}. '
+                               f'Ensure the satellite service is running (python manage.py run_satellite).'
+                })
+        
+        # Fallback: direct serial read (original behaviour when satellite is off)
         if not scale.com_port:
             return JsonResponse({
                 'success': False,

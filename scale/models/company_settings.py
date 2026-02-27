@@ -12,6 +12,7 @@ class CompanySettings(models.Model):
     api_url = models.CharField(max_length=100, blank=True, null=True)
     database_name = models.CharField(max_length=100, blank=True, null=True)
     target_endpoint = models.CharField(max_length=100, blank=True, null=True)
+    satellite = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

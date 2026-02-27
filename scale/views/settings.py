@@ -114,6 +114,7 @@ def config_import_export(request):
                             'erp_password': item.get('erp_password'),
                             'api_url': item.get('api_url'),
                             'database_name': item.get('database_name'),
+                            'satellite': item.get('satellite', False),
                             'is_active': item.get('is_active', True),
                         }
                     )
@@ -181,6 +182,7 @@ def config_export(request):
                 'erp_password': obj.erp_password,
                 'api_url': obj.api_url,
                 'database_name': obj.database_name,
+                'satellite': obj.satellite,
                 'is_active': obj.is_active
             })
             
