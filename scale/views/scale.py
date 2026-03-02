@@ -293,18 +293,27 @@ def get_current_weight_api(request, scale_id):
                 'message': f'Scale not found with scale_id: {scale_id}'
             }, status=404)
         
-        # Check if satellite mode is enabled — return cached weight from file
-        from ..models import CompanySettings
+        # Get tare weight from active product (if one exists)
+        from ..models import CompanySettings, Product
         from ..satellite_service import get_cached_weight_by_scale_id
         
+        tare_weight = 0
+        active_product = Product.objects.filter(is_active=True).first()
+        if active_product and active_product.tare_weight:
+            tare_weight = float(active_product.tare_weight)
+        
+        # Check if satellite mode is enabled — return cached weight from file
         settings = CompanySettings.objects.first()
         
         if settings and settings.satellite:
             cached = get_cached_weight_by_scale_id(str(scale_id))
             if cached:
+                gross_weight = cached['weight']
+                net_weight = gross_weight - tare_weight
                 return JsonResponse({
                     'success': True,
-                    'weight': cached['weight'],
+                    'weight': net_weight,
+                    'gross_weight': gross_weight,
                     'unit': cached['unit'],
                     'scale_id': cached.get('scale_id'),
                     'scale_name': cached.get('scale_name'),
@@ -351,10 +360,12 @@ def get_current_weight_api(request, scale_id):
                     num_str = numeric_match.group(1).replace(',', '')
                     unit = numeric_match.group(2).lower()
                     try:
-                        weight = float(num_str)
+                        gross_weight = float(num_str)
+                        net_weight = gross_weight - tare_weight
                         return JsonResponse({
                             'success': True,
-                            'weight': weight,
+                            'weight': net_weight,
+                            'gross_weight': gross_weight,
                             'unit': unit,
                             'scale_id': str(scale.scale_id) if scale.scale_id else None,
                             'scale_name': scale.name
