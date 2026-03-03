@@ -83,6 +83,8 @@ urlpatterns = [
     path('configuration/import-export/', views.config_import_export, name='config_import_export'),
     path('configuration/export/', views.config_export, name='config_export'),
     path('data-management/', views.data_management, name='data_management'),
+    path('data-management/delete-delivery-notes/', views.delete_all_delivery_notes, name='delete_all_delivery_notes'),
+    path('data-management/delete-weighing-records/', views.delete_all_weighing_records, name='delete_all_weighing_records'),
     
     # Driver Management URLs
     path('drivers/create-ajax/', views.driver_create_ajax, name='driver_create_ajax'),

@@ -37,16 +37,12 @@
                     </div>
                 </div>
 
-                <form method="post" onsubmit="return confirm('Are you absolutely sure you want to delete ALL delivery notes? This action CANNOT be undone!');">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="delete_delivery_notes">
-                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 w-full sm:w-auto">
-                        <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Delete All Delivery Notes
-                    </button>
-                </form>
+                <button type="button" id="delete-delivery-notes-btn" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 w-full sm:w-auto">
+                    <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete All Delivery Notes
+                </button>
             </div>
         </div>
 
@@ -72,18 +68,166 @@
                     </div>
                 </div>
 
-                <form method="post" onsubmit="return confirm('Are you absolutely sure you want to delete ALL weighing records? This action CANNOT be undone!');">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="delete_weighing_records">
-                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 w-full sm:w-auto">
-                        <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Delete All Weighing Records
-                    </button>
-                </form>
+                <button type="button" id="delete-weighing-records-btn" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 w-full sm:w-auto">
+                    <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete All Weighing Records
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Prompt Modal -->
+    <div id="password-modal" class="relative z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-zinc-500 bg-opacity-75 transition-opacity"></div>
+        <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-zinc-200">
+                    <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
+                                <h3 class="text-base font-semibold leading-6 text-zinc-900" id="modal-title"></h3>
+                                <div class="mt-2 text-sm text-zinc-500">
+                                    <p id="modal-description"></p>
+                                    <p class="mt-4 font-medium text-zinc-700">Please enter your admin password to confirm:</p>
+                                    <div class="mt-2 text-left">
+                                        <input type="password" id="admin-password" class="block w-full rounded-md border-zinc-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm p-2 border" placeholder="Admin Password">
+                                    </div>
+                                    <p id="password-error" class="hidden mt-2 text-sm text-red-600"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-zinc-200">
+                        <button type="button" id="confirm-delete-btn" class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto">Confirm Delete</button>
+                        <button type="button" id="cancel-delete-btn" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-zinc-900 shadow-sm ring-1 ring-inset ring-zinc-300 hover:bg-zinc-50 sm:mt-0 sm:w-auto">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const passwordModal = document.getElementById('password-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDescription = document.getElementById('modal-description');
+        const adminPasswordInput = document.getElementById('admin-password');
+        const passwordError = document.getElementById('password-error');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+
+        let currentDeleteUrl = '';
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function openModal(title, description, deleteUrl) {
+            currentDeleteUrl = deleteUrl;
+            modalTitle.textContent = title;
+            modalDescription.textContent = description;
+            adminPasswordInput.value = '';
+            passwordError.classList.add('hidden');
+            passwordModal.classList.remove('hidden');
+            setTimeout(() => adminPasswordInput.focus(), 100);
+        }
+
+        function closeModal() {
+            passwordModal.classList.add('hidden');
+            currentDeleteUrl = '';
+        }
+
+        // Delete All Delivery Notes button
+        document.getElementById('delete-delivery-notes-btn').addEventListener('click', function() {
+            openModal(
+                'Delete All Delivery Notes',
+                'Are you sure you want to delete ALL delivery notes and their associated weighing records? This action cannot be undone.',
+                '{% url "scale:delete_all_delivery_notes" %}'
+            );
+        });
+
+        // Delete All Weighing Records button
+        document.getElementById('delete-weighing-records-btn').addEventListener('click', function() {
+            openModal(
+                'Delete All Weighing Records',
+                'Are you sure you want to delete ALL weighing records? This action cannot be undone.',
+                '{% url "scale:delete_all_weighing_records" %}'
+            );
+        });
+
+        cancelDeleteBtn.addEventListener('click', closeModal);
+
+        adminPasswordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                confirmDeleteBtn.click();
+            }
+        });
+
+        confirmDeleteBtn.addEventListener('click', function() {
+            const password = adminPasswordInput.value;
+            if (!password) {
+                passwordError.textContent = 'Password is required.';
+                passwordError.classList.remove('hidden');
+                return;
+            }
+
+            const originalText = confirmDeleteBtn.textContent;
+            confirmDeleteBtn.disabled = true;
+            confirmDeleteBtn.textContent = 'Deleting...';
+
+            const csrftoken = getCookie('csrftoken');
+
+            fetch(currentDeleteUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify({ password: password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeModal();
+                    // Show success message and reload
+                    window.location.reload();
+                } else {
+                    passwordError.textContent = data.message || 'An error occurred. Please try again.';
+                    passwordError.classList.remove('hidden');
+                    confirmDeleteBtn.disabled = false;
+                    confirmDeleteBtn.textContent = originalText;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                passwordError.textContent = 'A network error occurred. Please try again.';
+                passwordError.classList.remove('hidden');
+                confirmDeleteBtn.disabled = false;
+                confirmDeleteBtn.textContent = originalText;
+            });
+        });
+    });
+</script>
 {% endblock %}

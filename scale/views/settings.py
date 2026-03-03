@@ -5,7 +5,7 @@ Handles company settings, config import/export, and data management.
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from users.views import is_admin
 from ..models import (
@@ -200,29 +200,61 @@ def config_export(request):
 @login_required
 @user_passes_test(is_admin)
 def data_management(request):
-    """Handle data management operations including bulk delete of delivery notes and weighing records"""
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        
-        if action == 'delete_delivery_notes':
-            try:
-                # Delete all delivery notes (weighing records will cascade delete based on model settings)
-                count = DeliveryNote.objects.count()
-                DeliveryNote.objects.all().delete()
-                messages.success(request, f'Successfully deleted {count} delivery notes.')
-            except Exception as e:
-                messages.error(request, f'Error deleting delivery notes: {str(e)}')
-        
-        elif action == 'delete_weighing_records':
-            try:
-                # Catches all weighing recordes that are not attached to a delivery note.
-                # This happens in cases where a database is restored and a record is left orphaned.
-                count = WeighingRecord.objects.count()
-                WeighingRecord.objects.all().delete()
-                messages.success(request, f'Successfully deleted {count} weighing records.')
-            except Exception as e:
-                messages.error(request, f'Error deleting weighing records: {str(e)}')
-        
-        return redirect('scale:data_management')
-    
+    """Render data management page"""
     return render(request, 'scale/data_management.html')
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_all_delivery_notes(request):
+    """AJAX endpoint to delete all delivery notes with password verification"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            password = data.get('password', '')
+
+            if not password:
+                return JsonResponse({'success': False, 'message': 'Password is required.'})
+
+            if not request.user.check_password(password):
+                return JsonResponse({'success': False, 'message': 'Incorrect password.'})
+
+            # Delete all delivery notes (weighing records will cascade delete based on model settings)
+            count = DeliveryNote.objects.count()
+            DeliveryNote.objects.all().delete()
+            return JsonResponse({'success': True, 'message': f'Successfully deleted {count} delivery notes.'})
+
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'Invalid JSON data.'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': f'Error details: {str(e)}'})
+
+    return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=405)
+
+
+@login_required
+@user_passes_test(is_admin)
+def delete_all_weighing_records(request):
+    """AJAX endpoint to delete all weighing records with password verification"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            password = data.get('password', '')
+
+            if not password:
+                return JsonResponse({'success': False, 'message': 'Password is required.'})
+
+            if not request.user.check_password(password):
+                return JsonResponse({'success': False, 'message': 'Incorrect password.'})
+
+            # Delete all weighing records
+            count = WeighingRecord.objects.count()
+            WeighingRecord.objects.all().delete()
+            return JsonResponse({'success': True, 'message': f'Successfully deleted {count} weighing records.'})
+
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'Invalid JSON data.'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': f'Error details: {str(e)}'})
+
+    return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=405)

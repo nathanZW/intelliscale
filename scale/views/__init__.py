@@ -84,6 +84,8 @@ from .settings import (
     config_import_export,
     config_export,
     data_management,
+    delete_all_delivery_notes,
+    delete_all_weighing_records,
 )
 
 # Printing station views
