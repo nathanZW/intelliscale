@@ -173,6 +173,18 @@
                 {% endif %}
             </div>
 
+            <!-- Mettler Toledo -->
+            <div>
+                <div class="flex items-center mt-5">
+                    {{ form.mettler_toledo }}
+                    <label for="{{ form.mettler_toledo.id_for_label }}" class="ml-2 block text-sm font-medium text-zinc-700">Mettler Toledo</label>
+                </div>
+                <p class="mt-1 text-xs text-zinc-500">Enable scale connection that may help with Mettler Toledo scales</p>
+                {% if form.mettler_toledo.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.mettler_toledo.errors }}</p>
+                {% endif %}
+            </div>
+
             <!-- Last Seen (Read-only) -->
             <div>
                 <label class="block text-sm font-medium text-zinc-700">Last Seen</label>
