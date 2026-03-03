@@ -357,7 +357,7 @@ def weighing_station(request):
                         # Mark as synced
                         weighing_record.is_synced = True
                         weighing_record.save()
-                        messages.success(request, 'Weighing record created successfully.')
+                        messages.success(request, f'Weighing record created successfully: {barcode}')
                     else:
                         # Record already exists with error message (saved by send_to_erp)
                         # Reload to ensure we have the latest error message
