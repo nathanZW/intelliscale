@@ -135,14 +135,7 @@
                                autocomplete="off">
                     </div>
 
-                    <script>
-                        document.getElementById('barcode-input').addEventListener('keydown', function(event) {
-                            if (event.key === 'Enter') {
-                                event.preventDefault();
-                                return false;
-                            }
-                        });
-                        </script>
+
 
                     <div id="custom-fields-container" class="space-y-4 hidden mt-6 mb-6">
                         <!-- Custom fields will be dynamically added here based on the selected process -->
@@ -1905,7 +1898,7 @@
         });
 
         // Main handler for Enter key (most scanners)
-        barcodeInput.addEventListener('keypress', function(e) {
+        barcodeInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault(); // Prevent any form submission
 
