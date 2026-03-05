@@ -1,17 +1,15 @@
 # Intelliscale
-> **The iterative fork with the latest improvements and features.**
 
-## 🚀 Getting Started
+## Getting Started
 
-### Linux (Recommended)
-This installation will configure Intelliscale to run automatically on boot.
+### Linux
+This installation will configure Intelliscale to run automatically on boot. Services include celery, nginx, gunicorn, and intelliscale-satellite
 
 1. **Installation:** Download and run the setup script:
-   * [intelliscale_setup.sh](https://github.com/user-attachments/files/25204908/intelliscale_setup.sh)
+   * [intelliscale_setup.sh](https://github.com/user-attachments/files/25759674/intelliscale_setup.sh)
 
 2. **Uninstallation:** If you need to remove the program and its configurations:
-   * [intelliscale_cleanup.sh](https://github.com/user-attachments/files/25334992/intelliscale_cleanup.sh)
-
+   * [intelliscale_cleanup.sh](https://github.com/user-attachments/files/25759684/intelliscale_cleanup.sh)
 
 ---
 
@@ -24,28 +22,20 @@ Open your hosts file:
 
 Add your entry at the bottom:
 `127.0.0.1   localhost`
-`127.0.0.1   yourcomputername`
+`127.0.1.1   yourcomputername`
 `127.0.0.1   intelliscale.local  # <--- Your new entry`
 
 #### 2. Configure Nginx
 Edit the Nginx site configuration:
-`sudo nano /etc/nginx/sites-available/intelliscale`
+`sudo nano /etc/nginx/sites-enabled/intelliscale`
 
 Update the `server_name` line:
-`server_name intelliscale.local; # <--- Replace with your chosen hostname`
+`server_name intelliscale.local; # <--- add your chosen hostname`
 
 #### 3. Apply Changes
 Restart the services to finalize the setup:
 `sudo systemctl daemon-reload`
 `sudo systemctl restart nginx`
-
----
-
-### 🪟 Windows
-*Note: Intelliscale offers limited functionality on Windows environments.*
-
-1. Clone the repository to your local machine.
-2. Locate and run the `.bat` file for basic functionality.
 
 ---
 
