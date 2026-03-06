@@ -99,51 +99,85 @@ def parse_weight_from_bytes(line):
     return None, decoded.strip()
 
 
+def _read_until_idle(ser, initial_wait=0.08, settle_time=0.05, max_wait=1.5):
+    """
+    Wait for the serial buffer to settle (no new bytes arriving), then read
+    everything at once. This prevents reading partial packets on slow USB
+    hardware where bytes trickle in over several milliseconds.
+
+    Args:
+        ser: open serial.Serial instance
+        initial_wait: seconds to wait for the first bytes to appear
+        settle_time: seconds of silence before we consider the packet complete
+        max_wait: absolute maximum seconds to wait before giving up
+    
+    Returns:
+        bytes read, or b'' if nothing arrived
+    """
+    deadline = time.monotonic() + max_wait
+    
+    # Wait for at least one byte to appear
+    while ser.in_waiting == 0:
+        if time.monotonic() >= deadline:
+            return b''
+        time.sleep(0.01)
+    
+    # Bytes are arriving — wait for them to stop (the packet is complete
+    # when no new bytes arrive for `settle_time` seconds)
+    prev_count = ser.in_waiting
+    last_change = time.monotonic()
+    while True:
+        time.sleep(0.02)
+        now = time.monotonic()
+        current_count = ser.in_waiting
+        if current_count != prev_count:
+            prev_count = current_count
+            last_change = now
+        elif (now - last_change) >= settle_time:
+            # Buffer has been stable — packet is complete
+            break
+        if now >= deadline:
+            break
+    
+    if ser.in_waiting > 0:
+        return ser.read(ser.in_waiting)
+    return b''
+
+
 def read_weight_from_serial(ser):
     """
-    Robustly reads weight data from the serial port, safely handling continuous
-    streams and preventing packet truncation.
+    Robustly reads weight data from the serial port, safely handling
+    continuous streams, STX-framed packets, and slow USB hardware.
 
-    Uses ser.read() instead of readline() to avoid truncating STX-framed
-    packets that lack newline terminators.
+    Uses a settling loop (_read_until_idle) to ensure the full packet has
+    been delivered from the USB controller before reading, preventing
+    partial reads on slow hardware.
 
     Strategy order:
-    1. Check if data is already waiting in the buffer (instant, no blocking)
-    2. Raw byte read — returns as soon as ANY bytes arrive (or timeout)
-    3. MT-SICS "Send Immediate" command (some scales need a prompt)
-    4. Standard CR/LF trigger fallback
+    1. Wait for a complete idle packet (works for streaming and STX scales)
+    2. MT-SICS "Send Immediate" command + wait for idle
+    3. Standard CR/LF trigger + wait for idle
     """
     original_timeout = ser.timeout
     ser.timeout = 1
     
     try:
-        # 1. Check if data is already waiting in the buffer (instant, no blocking)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
-        
-        # 2. Try raw byte read — returns as soon as ANY bytes arrive (or timeout)
-        #    This matches how scale_server_ex.py read from the scale
-        line = ser.read(10)
+        # 1. Wait for a complete packet to arrive and settle
+        line = _read_until_idle(ser, initial_wait=0.08, settle_time=0.05, max_wait=1.2)
         if line:
             return line
 
-        # 3. Try MT-SICS "Send Immediate" command (some scales need a prompt)
+        # 2. Try MT-SICS "Send Immediate" command (some scales need a prompt)
         ser.write(b"SI\r\n")
-        time.sleep(0.3)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
+        line = _read_until_idle(ser, initial_wait=0.3, settle_time=0.05, max_wait=1.0)
+        if line:
+            return line
 
-        # 4. Fallback to standard CR/LF trigger
+        # 3. Fallback to standard CR/LF trigger
         ser.write(b"\r\n")
-        time.sleep(0.3)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
+        line = _read_until_idle(ser, initial_wait=0.3, settle_time=0.05, max_wait=1.0)
+        if line:
+            return line
 
         return b''
     finally:
