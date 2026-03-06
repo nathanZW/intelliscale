@@ -261,6 +261,20 @@
                         weighing record for the same delivery note.</p>
                 </div>
 
+                <!-- Rolling Grower Number -->
+                <div>
+                    <label for="{{ form.rolling_grower_number.id_for_label }}"
+                        class="block text-sm font-medium text-zinc-700">Rolling Grower Number</label>
+                    <div class="mt-1">
+                        {{ form.rolling_grower_number }}
+                    </div>
+                    {% if form.rolling_grower_number.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.rolling_grower_number.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">If enabled, pre-populates the grower number from the previous
+                        weighing record for this process.</p>
+                </div>
+
                 <!-- Auto-Save on Scan -->
                 <div>
                     <label for="{{ form.auto_save_on_scan.id_for_label }}"

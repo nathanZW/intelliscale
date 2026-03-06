@@ -576,8 +576,14 @@
         // Parse process rolling hessian config
         const processRollingHessianConfig = JSON.parse('{{ process_rolling_hessian_config|escapejs }}');
         
+        // Parse process rolling grower number config
+        const processRollingGrowerNumberConfig = JSON.parse('{{ process_rolling_grower_number_config|escapejs }}');
+        
         // Parse prefilled hessian value
         const prefilledHessianValue = '{{ prefilled_hessian_value|escapejs }}';
+
+        // Parse prefilled grower number value
+        const prefilledGrowerNumberValue = '{{ prefilled_grower_number_value|escapejs }}';
 
         // Global variable to track current process allow spaces setting
 
@@ -599,6 +605,11 @@
         // Helper function to check if a process uses rolling hessian
         function checkRollingHessianEnabled(processId) {
             return processId && processRollingHessianConfig[processId] ? processRollingHessianConfig[processId] : false;
+        }
+
+        // Helper function to check if a process uses rolling grower number
+        function checkRollingGrowerNumberEnabled(processId) {
+            return processId && processRollingGrowerNumberConfig[processId] ? processRollingGrowerNumberConfig[processId] : false;
         }
 
         // Code 39 Mod 43 Validation Function
@@ -1239,6 +1250,24 @@
                                      // Highlight the field to indicate it's a rolling value
                                      input.classList.add('bg-blue-50', 'border-blue-500');
                                      input.title = "Auto-filled from previous weighing (Rolling Hessian)";
+                                     
+                                     // Remove highlight on user interaction
+                                     input.addEventListener('input', function() {
+                                         this.classList.remove('bg-blue-50', 'border-blue-500');
+                                         this.removeAttribute('title');
+                                     }, { once: true });
+                                 }
+                             }
+                        }
+
+                        // Check for Rolling Grower Number
+                        if (checkRollingGrowerNumberEnabled(currentProcessId)) {
+                             if (field.name.toLowerCase() === 'grower number' || field.name.toLowerCase() === 'grower_number') {
+                                 if (prefilledGrowerNumberValue && !input.value) {
+                                     input.value = prefilledGrowerNumberValue;
+                                     // Highlight the field to indicate it's a rolling value
+                                     input.classList.add('bg-blue-50', 'border-blue-500');
+                                     input.title = "Auto-filled from previous weighing (Rolling Grower Number)";
                                      
                                      // Remove highlight on user interaction
                                      input.addEventListener('input', function() {

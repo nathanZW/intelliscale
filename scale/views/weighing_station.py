@@ -431,12 +431,14 @@ def weighing_station(request):
     process_allow_spaces_in_barcode = {}
     process_use_code39_mod43_validation = {}
     process_rolling_hessian_config = {}
+    process_rolling_grower_number_config = {}
     process_auto_save_on_scan = {}
     for process in processes:
         process_allow_bale_insert[process.id] = process.allow_bale_insert
         process_allow_spaces_in_barcode[process.id] = process.allow_spaces_in_barcode
         process_use_code39_mod43_validation[process.id] = process.use_code39_mod43_validation
         process_rolling_hessian_config[process.id] = process.rolling_hessian
+        process_rolling_grower_number_config[process.id] = getattr(process, 'rolling_grower_number', False)
         process_auto_save_on_scan[process.id] = process.auto_save_on_scan
 
     # Rolling Hessian Logic
@@ -451,6 +453,19 @@ def weighing_station(request):
             # Check for 'hessian_id'
             if 'hessian_id' in last_record.custom_data:
                 prefilled_hessian_value = last_record.custom_data['hessian_id']
+
+    # Rolling Grower Number Logic
+    prefilled_grower_number_value = ''
+    if active_process and getattr(active_process, 'rolling_grower_number', False):
+        # The people using rolling grower number don't use delivery notes
+        # So we just get the latest weighing record for this process
+        last_record_process = WeighingRecord.objects.filter(
+            process_id=active_process.id
+        ).order_by('-timestamp').first()
+        
+        if last_record_process and last_record_process.custom_data:
+            if 'grower_number' in last_record_process.custom_data:
+                prefilled_grower_number_value = last_record_process.custom_data['grower_number']
     
     context = {
         'scales': scales,
@@ -466,12 +481,14 @@ def weighing_station(request):
         'process_allow_spaces_in_barcode': json.dumps(process_allow_spaces_in_barcode),
         'process_use_code39_mod43_validation': json.dumps(process_use_code39_mod43_validation),
         'process_rolling_hessian_config': json.dumps(process_rolling_hessian_config),
+        'process_rolling_grower_number_config': json.dumps(process_rolling_grower_number_config),
         'process_auto_save_on_scan': json.dumps(process_auto_save_on_scan),
         'unsynced_count': WeighingRecord.objects.filter(is_synced=False).count(),
         'allow_manual_entry': allow_manual_entry,
         'active_delivery_note': active_delivery_note,
         'product_tare_weights': json.dumps(product_tare_weights),
         'prefilled_hessian_value': prefilled_hessian_value,
+        'prefilled_grower_number_value': prefilled_grower_number_value,
     }
     
     return render(request, 'scale/weighing_station.html', context)
@@ -692,7 +709,10 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                             'group_number': group_number
                         }
                     else:
-                        base_url = f"{company_settings.api_url}/receiving/scaleserver/manual_scale/{float(net_weight):.2f}/{barcode}"
+                        grower_number = custom_data.get('grower_number', '') if custom_data else ''
+                        if not grower_number:
+                            grower_number = ''
+                        base_url = f"{company_settings.api_url}/receiving/scaleserver/manual_scale/{float(net_weight):.2f}/{barcode}/{scale_id}/{grower_number}"
                     
                     payload = ""
                     headers = {

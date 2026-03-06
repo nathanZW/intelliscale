@@ -98,9 +98,12 @@ def save_mass():
     if request.method == 'POST':
         mass = round(float(request.form['mass']))
         barcode = request.form['barcode']
+        grower_number = request.form.get('grower_number', '0')
+        if not grower_number:
+            grower_number = '0'
         if mass > 10:
-            r = requests.post(SERVER_ADDRESS + '/receiving/scaleserver/manual_scale/' + str(mass) + '/' + barcode,
-                              json={"barcode": barcode, "mass": mass, "scale_id": SCALE_ID})
+            r = requests.post(SERVER_ADDRESS + '/receiving/scaleserver/manual_scale/' + str(mass) + '/' + barcode + '/' + SCALE_ID + '/' + grower_number,
+                              json={"barcode": barcode, "mass": mass, "scale_id": SCALE_ID, "grower_number": grower_number})
             # print('Odoo Response:', r)
             if r.status_code == 200:
                 # save_status = "Mass Saved"
