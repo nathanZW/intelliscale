@@ -389,40 +389,23 @@ def get_weight(request, scale_id):
                     if ser.is_open:
                         # Read response using protocol-aware helper
                         line = read_weight_from_serial(ser)
-                        # Decode bytes
-                        try:
-                            decoded = line.decode('utf-8', errors='ignore').strip()
-                        except Exception:
-                            decoded = line.decode(errors='ignore').strip()
+                        # Parse weight using format-aware parser
+                        weight, raw_str = parse_weight_from_bytes(line)
+                        
+                        # Concise log: show weight + truncated raw bytes
+                        raw_preview = repr(line[:60]) + ('...' if len(line) > 60 else '')
+                        print(f"Scale {scale.name}: weight={weight} raw={raw_preview}")
 
-                        print(f"Raw data from scale {scale.name}: '{decoded}' (bytes: {line})")
-
-                        # Attempt to parse numeric weight from decoded string
-                        # robustly looks for a number which may include decimal points or commas instead of using slices 
-                        numeric_match = re.search(r'([-+]?\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', decoded, re.IGNORECASE)
-
-                        if numeric_match:
-                            num_str = numeric_match.group(1).replace(',', '')
-                            #not in use for now - holds the weights UOM
-                            unit = numeric_match.group(2).lower()
-                            try:
-                                weight = float(num_str)
-                                print(f"Successfully parsed weight for scale {scale.name}: {weight}")
-                                return JsonResponse({
-                                    'success': True,
-                                    'weight': weight
-                                })
-                            except ValueError:
-                                print(f"Could not parse numeric weight from '{num_str}' for scale {scale.name}")
-                                return JsonResponse({
-                                    'success': False,
-                                    'message': f'Could not parse numeric weight: {num_str}'
-                                })
+                        if weight is not None:
+                            return JsonResponse({
+                                'success': True,
+                                'weight': weight
+                            })
                         else:
-                            print(f"No numeric weight found in '{decoded}' for scale {scale.name}")
+                            print(f"No numeric weight found in '{raw_str}' for scale {scale.name}")
                             return JsonResponse({
                                 'success': False,
-                                'message': f'No numeric weight found in: {decoded}'
+                                'message': f'No numeric weight found in: {raw_str}'
                             })
                         
             except serial.SerialException as e:
@@ -550,38 +533,33 @@ def get_current_weight_api(request, scale_id):
                 if ser.is_open:
                     # Read response using protocol-aware helper
                     line = read_weight_from_serial(ser)
-                    # Decode bytes
-                    try:
-                        decoded = line.decode('utf-8', errors='ignore').strip()
-                    except Exception:
-                        decoded = line.decode(errors='ignore').strip()
+                    if not line:
+                         return JsonResponse({
+                            'success': False,
+                            'message': 'Scale connected but returned no data.'
+                        })
 
-                    # Attempt to parse numeric weight from decoded string
-                    numeric_match = re.search(r'([-+]?\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', decoded, re.IGNORECASE)
-
-                    if numeric_match:
-                        num_str = numeric_match.group(1).replace(',', '')
-                        unit = numeric_match.group(2).lower()
-                        try:
-                            gross_weight = float(num_str)
-                            net_weight = gross_weight - tare_weight
-                            return JsonResponse({
-                                'success': True,
-                                'weight': net_weight,
-                                'gross_weight': gross_weight,
-                                'unit': unit,
-                                'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                                'scale_name': scale.name
-                            })
-                        except ValueError:
-                            return JsonResponse({
-                                'success': False,
-                                'message': f'Could not parse numeric weight: {num_str}'
-                            })
+                    # Parse weight using format-aware parser
+                    weight, raw_str = parse_weight_from_bytes(line)
+                    
+                    if weight is not None:
+                        net_weight = weight - tare_weight
+                        # Extract unit if present
+                        unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
+                        unit = unit_match.group(1).lower() if unit_match else 'kg'
+                        
+                        return JsonResponse({
+                            'success': True,
+                            'weight': net_weight,
+                            'gross_weight': weight,
+                            'unit': unit,
+                            'scale_id': str(scale.scale_id) if scale.scale_id else None,
+                            'scale_name': scale.name
+                        })
                     else:
                         return JsonResponse({
                             'success': False,
-                            'message': f'No numeric weight found in: {decoded}'
+                            'message': f'No numeric weight found in: {raw_str}'
                         })
                     
         except serial.SerialException as e:
