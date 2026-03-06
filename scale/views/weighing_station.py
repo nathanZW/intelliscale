@@ -713,6 +713,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         if not grower_number:
                             grower_number = ''
                         base_url = f"{company_settings.api_url}/receiving/scaleserver/manual_scale/{float(net_weight):.2f}/{barcode}/{scale_id}/{grower_number}"
+                        logger.debug('Calling manual_scale with base_url: %s', base_url)
                     
                     payload = ""
                     headers = {
