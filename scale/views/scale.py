@@ -355,11 +355,6 @@ def get_weight(request, scale_id):
                         ser = serial.Serial(scale.com_port, timeout=scale.timeout or 1)
                     
                     if ser.is_open:
-                        #clear any stale data from buffer
-                        for _ in range(3):
-                            ser.reset_input_buffer()
-                            time.sleep(0.05)
-                        
                         # Read response using protocol-aware helper
                         line = read_weight_from_serial(ser)
                         
@@ -392,15 +387,11 @@ def get_weight(request, scale_id):
                     # Default mode: original behaviour
                     ser = serial.Serial(scale.com_port, 9600, timeout=2)
                     if ser.is_open:
-                        #clear any stale data from buffer
-                        for _ in range(3):
-                            ser.reset_input_buffer()
-                            time.sleep(0.05)
                         # Send command to get weight (this may vary by scale model)
                         ser.write(b"\r\n")  # Some scales need a CR/LF to trigger reading
                         # Read response
                         time.sleep(0.3)
-                        line = ser.readline()
+                        line = read_weight_from_serial(ser)
                         # Decode bytes
                         try:
                             decoded = line.decode('utf-8', errors='ignore').strip()
@@ -530,11 +521,6 @@ def get_current_weight_api(request, scale_id):
                     ser = serial.Serial(scale.com_port, timeout=scale.timeout or 1)
                 
                 if ser.is_open:
-                    # Clear any stale data from buffer
-                    for _ in range(3):
-                        ser.reset_input_buffer()
-                        time.sleep(0.05)
-                    
                     # Read response using protocol-aware helper
                     line = read_weight_from_serial(ser)
                     
@@ -565,15 +551,11 @@ def get_current_weight_api(request, scale_id):
                 # Default mode: original behaviour
                 ser = serial.Serial(scale.com_port, 9600, timeout=2)
                 if ser.is_open:
-                    # Clear any stale data from buffer
-                    for _ in range(3):
-                        ser.reset_input_buffer()
-                        time.sleep(0.05)
                     # Send command to get weight
                     ser.write(b"\r\n")
                     # Read response
                     time.sleep(0.3)
-                    line = ser.readline()
+                    line = read_weight_from_serial(ser)
                     # Decode bytes
                     try:
                         decoded = line.decode('utf-8', errors='ignore').strip()

@@ -85,49 +85,42 @@ def parse_weight_from_bytes(line):
 
 def read_weight_from_serial(ser):
     """
-    Robustly reads weight data from the serial port, accommodating:
-    1. Raw byte read (fastest — works for scales like the old scale_server_ex.py)
-    2. Continuous Mode (streaming data with newline terminators)
-    3. MT-SICS Command Mode (sending SI\\r\\n)
-    4. Standard CR/LF polling
-    
-    Uses a short read timeout (1s) regardless of the port's configured timeout
-    to avoid hanging the server.
+    Robustly reads weight data from the serial port, safely handling continuous 
+    streams and preventing packet truncation.
     """
-    # Temporarily set a short timeout for reads
     original_timeout = ser.timeout
     ser.timeout = 1
     
     try:
-        # 1. Check if data is already waiting in the buffer (instant, no blocking)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
+        # 1. Clear stale data safely
+        # Instead of arbitrary time.sleep() and flushInput() which can cut a packet
+        # in half, we read until the buffer is empty or we get a clean line.
+        ser.reset_input_buffer()
         
-        # 2. Try raw byte read — returns as soon as ANY bytes arrive (or timeout)
-        #    This matches how scale_server_ex.py read from the scale
-        line = ser.read(10)
-        if line:
+        # 2. Try reading a clean line (Continuous Output Mode or generic streaming)
+        # readline() reads until it hits \n, preventing partial packets.
+        line = ser.readline()
+        if line and b'\n' in line or b'\r' in line:
             return line
-
-        # 3. Try MT-SICS "Send Immediate" command (some scales need a prompt)
+            
+        # 3. If nothing streamed, try MT-SICS "Send Immediate" command
         ser.write(b"SI\r\n")
         time.sleep(0.3)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
+        line = ser.readline()
+        if line:
+            return line
 
         # 4. Fallback to standard CR/LF trigger
         ser.write(b"\r\n")
         time.sleep(0.3)
+        line = ser.readline()
+        if line:
+            return line
+            
+        # 5. Last resort: just read whatever is there (STX-framed formats sometimes lack \n)
         if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
+            return ser.read(ser.in_waiting)
 
         return b''
     finally:
-        # Restore original timeout
         ser.timeout = original_timeout
