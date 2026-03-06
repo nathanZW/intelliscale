@@ -76,18 +76,27 @@ def parse_weight_from_bytes(line):
             if b'\x02' not in line:
                 return None, decoded.strip()
         
-    # We iterate forwards. Because `readline()` stops AT the newline, 
-    # the last element of `parts` might be empty strings if `\r\n` is split properly.
-    # However, if the buffer was backed up, we might get multiple packets. We
-    # want to grab the first valid parse we can find.
+    # Iterate forwards to grab the first valid parse we can find
     for part in parts:
+        # Before stripping, a valid scale packet almost always has leading padding spaces
+        # (e.g. "   39.5 KG G"). A fragment chopped by USB buffer dropping (like "5 KG G") 
+        # usually lacks them unless the buffer chopped right inside the padding.
+        # We will use the unstripped length and structure as a strong hint.
+        original_len = len(part)
         part = part.strip()
         if not part:
             continue
             
-        # --- Format 2: Unit-suffixed (e.g. "+ 1.23 kg") ---
+        # --- Format 2: Unit-suffixed (e.g. "+ 1.23 kg" or "  39.5 KG G") ---
+        # A valid packet from this scale is typically ~11+ characters long.
+        # A fragment like "5 KG G" is only 6 characters.
         numeric_match = re.search(r'([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', part, re.IGNORECASE)
         if numeric_match:
+            # If the original string was incredibly short (e.g. < 9 chars), it's almost certainly a fragment,
+            # NOT a cleanly outputted scale payload which always has padding.
+            if original_len < 9:
+                 continue
+                 
             num_str = numeric_match.group(1).replace(',', '').replace(' ', '')
             try:
                 weight = float(num_str)
