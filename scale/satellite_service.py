@@ -80,11 +80,6 @@ def _read_weight_from_scale(scale):
             ser = serial.Serial(scale.com_port, timeout=scale.timeout or 2)
 
         if ser.is_open:
-            # Clear stale data
-            for _ in range(3):
-                ser.reset_input_buffer()
-                time.sleep(0.05)
-            
             # Use shared multi-strategy reader (raw → MT-SICS → CR/LF)
             line = read_weight_from_serial(ser)
             

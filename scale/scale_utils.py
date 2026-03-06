@@ -57,30 +57,46 @@ def parse_weight_from_bytes(line):
     
     # --- Decode for remaining parsers ---
     try:
-        decoded = line.decode('utf-8', errors='ignore').strip()
+        decoded = line.decode('utf-8', errors='ignore')
     except Exception:
-        decoded = line.decode(errors='ignore').strip()
+        decoded = line.decode(errors='ignore')
+        
+    # Split by common terminators to isolate individual readings
+    # We replace \r with \n, then split by \n
+    parts = decoded.replace('\r', '\n').split('\n')
     
-    # --- Format 2: Unit-suffixed (e.g. "+ 1.23 kg") ---
-    numeric_match = re.search(r'([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', decoded, re.IGNORECASE)
-    if numeric_match:
-        num_str = numeric_match.group(1).replace(',', '').replace(' ', '')
-        try:
-            weight = float(num_str)
-            return weight, decoded
-        except ValueError:
-            pass
+    # If the raw bytes didn't end with a terminator, the last chunk in `parts`
+    # is likely an incomplete partial payload cut off mid-transmission.
+    # If we have multiple parts, it's safer to discard the incomplete tail.
+    if not (line.endswith(b'\n') or line.endswith(b'\r')) and len(parts) > 1:
+        parts.pop()
+        
+    # Iterate backwards to find the most recent valid reading
+    for part in reversed(parts):
+        part = part.strip()
+        if not part:
+            continue
+            
+        # --- Format 2: Unit-suffixed (e.g. "+ 1.23 kg") ---
+        numeric_match = re.search(r'([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', part, re.IGNORECASE)
+        if numeric_match:
+            num_str = numeric_match.group(1).replace(',', '').replace(' ', '')
+            try:
+                weight = float(num_str)
+                return weight, part
+            except ValueError:
+                pass
+        
+        # --- Format 3: Simple numeric fallback ---
+        fallback_str = re.sub(r'[^0-9.,-]', '', part).strip('.,').strip()
+        if fallback_str:
+            try:
+                weight = float(fallback_str.replace(',', ''))
+                return weight, part
+            except ValueError:
+                pass
     
-    # --- Format 3: Simple numeric fallback ---
-    fallback_str = re.sub(r'[^0-9.,-]', '', decoded).strip('.,').strip()
-    if fallback_str:
-        try:
-            weight = float(fallback_str.replace(',', ''))
-            return weight, decoded
-        except ValueError:
-            pass
-    
-    return None, decoded
+    return None, decoded.strip()
 
 
 def read_weight_from_serial(ser):
