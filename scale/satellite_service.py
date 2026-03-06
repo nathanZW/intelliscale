@@ -8,8 +8,9 @@ import json
 import os
 import time
 import serial
-import re
+import serial.tools.list_ports
 import logging
+from scale.scale_utils import parse_weight_from_bytes, read_weight_from_serial
 
 logger = logging.getLogger(__name__)
 
@@ -56,39 +57,48 @@ def _write_cache(data):
 def _read_weight_from_scale(scale):
     """Read weight from a single scale via serial.
     
+    Uses the scale's configured serial parameters (baud_rate, parity, etc.)
+    and the shared read/parse helpers for robust, protocol-aware reading.
+    
     Returns:
         (weight: float, unit: str) or (None, None) on failure
     """
     ser = None
     try:
-        ser = serial.Serial(scale.com_port, 9600, timeout=2)
+        # Open with the scale's configured serial parameters
+        try:
+            ser = serial.Serial(
+                port=scale.com_port,
+                baudrate=scale.baud_rate or 9600,
+                timeout=scale.timeout or 2,
+                parity=scale.parity or 'N',
+                stopbits=scale.stop_bits or 1,
+                bytesize=scale.data_bits or 8
+            )
+        except serial.SerialException:
+            # Fallback: open with just port and timeout
+            ser = serial.Serial(scale.com_port, timeout=scale.timeout or 2)
+
         if ser.is_open:
             # Clear stale data
             for _ in range(3):
                 ser.reset_input_buffer()
                 time.sleep(0.05)
             
-            # Send command to trigger reading
-            ser.write(b"\r\n")
-            time.sleep(0.3)
-            line = ser.readline()
+            # Use shared multi-strategy reader (raw → MT-SICS → CR/LF)
+            line = read_weight_from_serial(ser)
             
-            try:
-                decoded = line.decode('utf-8', errors='ignore').strip()
-            except Exception:
-                decoded = line.decode(errors='ignore').strip()
+            if not line:
+                return None, None
 
-            # Parse numeric weight
-            numeric_match = re.search(
-                r'([-+]?\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b',
-                decoded,
-                re.IGNORECASE
-            )
-
-            if numeric_match:
-                num_str = numeric_match.group(1).replace(',', '')
-                unit = numeric_match.group(2).lower()
-                weight = float(num_str)
+            # Use shared format-aware parser
+            weight, raw_str = parse_weight_from_bytes(line)
+            
+            if weight is not None:
+                # Extract unit if present in raw string
+                import re
+                unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
+                unit = unit_match.group(1).lower() if unit_match else 'kg'
                 return weight, unit
 
         return None, None
@@ -100,18 +110,89 @@ def _read_weight_from_scale(scale):
             ser.close()
 
 
+def _try_auto_detect_port(scale):
+    """Attempt to auto-detect a COM port for a scale.
+    
+    Scans available serial ports and tries to open each one using
+    the scale's configured serial parameters.
+    
+    If a working port is found, updates scale.com_port and saves to DB.
+    
+    Returns:
+        True if a port was detected and saved, False otherwise.
+    """
+    available_comports = serial.tools.list_ports.comports()
+    
+    for comport_info in available_comports:
+        port_device = comport_info.device
+        
+        # Filter for common serial port patterns
+        if not ('TTYUSB' in port_device.upper() or 'COM' in port_device.upper() or 'SERIAL' in port_device.upper()):
+            continue
+        
+        ser = None
+        # Try with the scale's configured serial parameters
+        try:
+            ser = serial.Serial(
+                port=port_device,
+                baudrate=scale.baud_rate or 9600,
+                timeout=scale.timeout or 2,
+                parity=scale.parity or 'N',
+                stopbits=scale.stop_bits or 1,
+                bytesize=scale.data_bits or 8
+            )
+            if ser.is_open:
+                ser.close()
+                scale.com_port = port_device
+                scale.save(update_fields=['com_port'])
+                logger.info(f"Auto-detected port {port_device} for scale {scale.name}. Saved to DB.")
+                return True
+        except serial.SerialException:
+            if ser and ser.is_open:
+                ser.close()
+        except Exception:
+            if ser and ser.is_open:
+                ser.close()
+        
+        # Fallback: try with just port and timeout
+        try:
+            ser = serial.Serial(port_device, timeout=scale.timeout or 2)
+            if ser.is_open:
+                ser.close()
+                scale.com_port = port_device
+                scale.save(update_fields=['com_port'])
+                logger.info(f"Auto-detected port {port_device} (defaults) for scale {scale.name}. Saved to DB.")
+                return True
+        except serial.SerialException:
+            if ser and ser.is_open:
+                ser.close()
+        except Exception:
+            if ser and ser.is_open:
+                ser.close()
+    
+    return False
+
+
 def poll_all_scales():
-    """Poll all active scales and update the cache file."""
+    """Poll all active scales and update the cache file.
+    
+    Scales with a saved com_port are read directly.
+    Scales without a com_port trigger auto-detection first.
+    """
     from scale.models import Scale
 
-    active_scales = Scale.objects.filter(is_active=True).exclude(
-        com_port__isnull=True
-    ).exclude(com_port='')
+    active_scales = Scale.objects.filter(is_active=True)
 
     cached = read_cached_weights()
 
     for scale in active_scales:
         try:
+            # Auto-detect port if not set
+            if not scale.com_port:
+                if not _try_auto_detect_port(scale):
+                    # No port found this cycle — skip silently
+                    continue
+            
             weight, unit = _read_weight_from_scale(scale)
             if weight is not None:
                 scale_id_str = str(scale.scale_id) if scale.scale_id else str(scale.pk)
