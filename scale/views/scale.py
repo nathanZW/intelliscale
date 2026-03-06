@@ -94,54 +94,46 @@ def parse_weight_from_bytes(line):
     return None, decoded
 
 
-def read_weight_from_serial(ser):
-    """
-    Robustly reads weight data from the serial port, accommodating:
-    1. Raw byte read (fastest — works for scales like the old scale_server_ex.py)
-    2. Continuous Mode (streaming data with newline terminators)
-    3. MT-SICS Command Mode (sending SI\\r\\n)
-    4. Standard CR/LF polling
-    
-    Uses a short read timeout (1s) regardless of the port's configured timeout
-    to avoid hanging the server.
-    """
-    # Temporarily set a short timeout for reads
-    original_timeout = ser.timeout
-    ser.timeout = 1
-    
-    try:
-        # 1. Check if data is already waiting in the buffer (instant, no blocking)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
-        
-        # 2. Try raw byte read — returns as soon as ANY bytes arrive (or timeout)
-        #    This matches how scale_server_ex.py read from the scale
-        line = ser.read(10)
-        if line:
-            return line
+def read_weight_from_serial(ser):                                                                                                                                                                                                                          
+      """         
+      Robustly reads weight data from the serial port, accommodating:                                                                                                                                                                                        
+      1. Continuous Mode (streaming data with newline terminators)
+      2. MT-SICS Command Mode (sending SI\r\n)
+      3. Standard CR/LF polling
 
-        # 3. Try MT-SICS "Send Immediate" command (some scales need a prompt)
-        ser.write(b"SI\r\n")
-        time.sleep(0.3)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
+      Uses a short read timeout (1s) regardless of the port's configured timeout
+      to avoid hanging the server.
+      """
+      original_timeout = ser.timeout
+      ser.timeout = 1
 
-        # 4. Fallback to standard CR/LF trigger
-        ser.write(b"\r\n")
-        time.sleep(0.3)
-        if ser.in_waiting > 0:
-            line = ser.read(ser.in_waiting)
-            if line:
-                return line
+      try:
+          # 1. Flush stale data, then check if scale is streaming
+          ser.reset_input_buffer()
+          time.sleep(0.1)  # brief wait for fresh data to arrive
 
-        return b''
-    finally:
-        # Restore original timeout
-        ser.timeout = original_timeout
+          if ser.in_waiting > 0:
+              line = ser.readline()
+              if line:
+                  return line
+
+          # 2. Try MT-SICS "Send Immediate" command
+          ser.reset_input_buffer()
+          ser.write(b"SI\r\n")
+          line = ser.readline()  # blocks up to timeout waiting for \n terminator
+          if line:
+              return line
+
+          # 3. Fallback to standard CR/LF trigger
+          ser.reset_input_buffer()
+          ser.write(b"\r\n")
+          line = ser.readline()
+          if line:
+              return line
+
+          return b''
+      finally:
+          ser.timeout = original_timeout
 
 
 @login_required
