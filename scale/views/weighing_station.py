@@ -8,9 +8,10 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
+from django.core.cache import cache
 from users.views import is_admin
 from ..models import (
-    Scale, WeighingProcess, Product, DeliveryNote, WeighingRecord, 
+    Scale, WeighingProcess, Product, DeliveryNote, WeighingRecord,
     CompanySettings, Driver, Truck, Trailer
 )
 import json
@@ -20,6 +21,11 @@ import time
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Cache key and TTL for ERP session
+# Odoo has a 15-minute idle timeout, so we cache for 10 minutes to be safe
+ERP_SESSION_CACHE_KEY = 'erp_session_id'
+ERP_SESSION_TTL = 600  # 10 minutes in seconds
 
 
 @login_required
@@ -540,6 +546,12 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
     # Check for a session id in the browser cookies
     session_id = request.COOKIES.get('session_id')
     if not session_id:
+        # Try to get cached session first
+        session_id = cache.get(ERP_SESSION_CACHE_KEY)
+        if session_id:
+            logger.info('Using cached ERP session ID')
+    
+    if not session_id:
         try:
             url = f"{company_settings.api_url}/web/session/authenticate"
 
@@ -582,9 +594,11 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     else:
                         # If no session_id in response but no error, try to get it from the result
                         session_id = result['result'].get('session_id')
-                        
+
                     if session_id:
-                        logger.info('Successfully authenticated with ERP session ID: %s', session_id)
+                        # Cache the session ID for future requests
+                        cache.set(ERP_SESSION_CACHE_KEY, session_id, ERP_SESSION_TTL)
+                        logger.info('Successfully authenticated with ERP session ID: %s (cached for %d seconds)', session_id, ERP_SESSION_TTL)
                     else:
                         return _log_sync_error(weighing_record_id, "Authentication succeeded but no valid session ID returned from ERP")
                 elif 'error' in result:
@@ -594,7 +608,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     return _log_sync_error(weighing_record_id, f"ERP authentication failed: Unexpected response format - {response.text}")
             else:
                 return _log_sync_error(weighing_record_id, f"ERP authentication failed with status {response.status_code}: {response.text}")
-                
+
         except requests.exceptions.ConnectionError as e:
             return _log_sync_error(weighing_record_id, f"ERP connection error during authentication: {str(e)}")
         except requests.exceptions.Timeout as e:
@@ -664,7 +678,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 logger.info('create-commercial-bale response received in %.2f ms', (time.time() - start_time) * 1000)
                 logger.debug('create-commercial-bale response status: %s', response.status_code)
                 logger.debug('create-commercial-bale response text: %s', response.text)
-                
+
                 if response.status_code in [200, 201]:  # 201 Created is also successful
                     # Check if the response body contains success=false
                     try:
@@ -676,12 +690,22 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                             return _log_sync_success(weighing_record_id)
                     except ValueError:
                         return _log_sync_success(weighing_record_id)
+                elif response.status_code == 403:
+                    # Session may have expired - clear cache and retry once
+                    logger.warning('ERP returned 403, session may have expired. Re-authenticating...')
+                    cache.delete(ERP_SESSION_CACHE_KEY)
+                    return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
                 elif response.status_code >= 400:
                     error_message = response.text
                     try:
                         response_json = response.json()
                         if 'error' in response_json and 'data' in response_json['error']:
                             error_message = response_json['error']['data'].get('message', response.text)
+                            # Check for session expiry in error message
+                            if 'Session' in error_message or 'expired' in error_message.lower() or 'authentication' in error_message.lower():
+                                logger.warning('ERP session expired. Re-authenticating...')
+                                cache.delete(ERP_SESSION_CACHE_KEY)
+                                return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
                     except (ValueError, KeyError):
                         pass
                     return _log_sync_error(weighing_record_id, f"create-commercial-bale failed with status {response.status_code}: {error_message}")
@@ -745,12 +769,22 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                                 return _log_sync_success(weighing_record_id)
                         except ValueError:
                             return _log_sync_success(weighing_record_id)
+                    elif response.status_code == 403:
+                        # Session may have expired - clear cache and retry once
+                        logger.warning('ERP returned 403, session may have expired. Re-authenticating...')
+                        cache.delete(ERP_SESSION_CACHE_KEY)
+                        return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
                     elif response.status_code >= 400:
                         error_message = response.text
                         try:
                             response_json = response.json()
                             if 'error' in response_json and 'data' in response_json['error']:
                                 error_message = response_json['error']['data'].get('message', response.text)
+                                # Check for session expiry in error message
+                                if 'Session' in error_message or 'expired' in error_message.lower() or 'authentication' in error_message.lower():
+                                    logger.warning('ERP session expired. Re-authenticating...')
+                                    cache.delete(ERP_SESSION_CACHE_KEY)
+                                    return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
                         except (ValueError, KeyError):
                             pass
                         return _log_sync_error(weighing_record_id, f"ERP API call failed with status {response.status_code}: {error_message}")
