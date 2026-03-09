@@ -16,6 +16,7 @@ from ..models import (
 import json
 from decimal import Decimal
 import requests
+import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -556,17 +557,20 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 "X-API-Key": api_key
             }
 
+            logger.info('Sending ERP authenticate request to: %s', url)
+            start_time = time.time()
             logger.debug('Making authentication request to: %s', url)
             logger.debug('Auth headers: %s', headers)
             logger.debug('Auth payload: %s', payload)
 
             response = requests.request("POST", url, json=payload, headers=headers)
 
+            logger.info('ERP authenticate response received in %.2f ms', (time.time() - start_time) * 1000)
             logger.debug('Auth response status: %s', response.status_code)
             logger.debug('Auth response headers: %s', dict(response.headers))
             logger.debug('Auth response cookies: %s', dict(response.cookies))
             logger.debug('Auth response body: %s', response.text)
-        
+
             if response.status_code == 200:
                 result = response.json()
                 if 'result' in result and result['result'] is not None:
@@ -643,18 +647,21 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 
                 # Construct URL for create-commercial-bale endpoint
                 url = f"{company_settings.api_url}/api/bales/create-commercial-bale"
-                
+
+                logger.info('Sending create-commercial-bale request to: %s', url)
                 logger.debug('Calling create-commercial-bale with params: %s', params)
-                
+                start_time = time.time()
+
                 payload = ""
-                
+
                 # Make the API call
                 headers = {
                     "User-Agent": "insomnia/11.5.0",
                     "X-API-Key": api_key
                 }
                 response = requests.request("POST", url, data=payload, headers=headers, params=params)
-                
+
+                logger.info('create-commercial-bale response received in %.2f ms', (time.time() - start_time) * 1000)
                 logger.debug('create-commercial-bale response status: %s', response.status_code)
                 logger.debug('create-commercial-bale response text: %s', response.text)
                 
@@ -713,15 +720,19 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         if not grower_number:
                             grower_number = ''
                         base_url = f"{company_settings.api_url}/receiving/scaleserver/manual_scale/{float(net_weight):.2f}/{barcode}/{scale_id}/{grower_number}"
-                        logger.debug('Calling manual_scale with base_url: %s', base_url)
-                    
+                        logger.info('Sending manual_scale request to: %s', base_url)
+
                     payload = ""
                     headers = {
                         "User-Agent": "insomnia/11.5.0",
                         "X-API-Key": api_key
                     }
+                    if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
+                        logger.info('Sending update-mass request to: %s', base_url)
+                        logger.debug('Calling update-mass with params: %s', params)
+                    start_time = time.time()
                     response = requests.request("POST", base_url, data=payload, params=params, headers=headers)
-                    logger.debug('Calling update-mass with params: %s', params)
+                    logger.info('ERP scaleserver response received in %.2f ms', (time.time() - start_time) * 1000)
                     logger.debug('update-mass response status: %s', response.status_code)
                     logger.debug('update-mass response text: %s', response.text)
                     
