@@ -522,7 +522,7 @@ def _log_sync_success(weighing_record_id):
         )
     return True
 
-def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type=None, process_id=None, delivery_note=None):
+def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type=None, process_id=None, delivery_note=None, retry_count=0):
     # Trim whitespace from barcode unless process allows spaces
     allow_spaces = False
     if process_id:
@@ -544,7 +544,10 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
     api_key = company_settings.api_key if company_settings and company_settings.api_key else None
     
     # Check for a session id in the browser cookies
-    session_id = request.COOKIES.get('session_id')
+    session_id = None
+    if retry_count == 0:
+        session_id = request.COOKIES.get('session_id')
+        
     if not session_id:
         # Try to get cached session first
         session_id = cache.get(ERP_SESSION_CACHE_KEY)
@@ -673,7 +676,8 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     "User-Agent": "insomnia/11.5.0",
                     "X-API-Key": api_key
                 }
-                response = requests.request("POST", url, data=payload, headers=headers, params=params)
+                cookies = {'session_id': session_id} if session_id else None
+                response = requests.request("POST", url, data=payload, headers=headers, params=params, cookies=cookies)
 
                 logger.info('create-commercial-bale response received in %.2f ms', (time.time() - start_time) * 1000)
                 logger.debug('create-commercial-bale response status: %s', response.status_code)
@@ -694,7 +698,9 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     # Session may have expired - clear cache and retry once
                     logger.warning('ERP returned 403, session may have expired. Re-authenticating...')
                     cache.delete(ERP_SESSION_CACHE_KEY)
-                    return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
+                    if retry_count < 1:
+                        return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note, retry_count=retry_count + 1)
+                    return _log_sync_error(weighing_record_id, "ERP API call failed: Session expired and re-authentication failed")
                 elif response.status_code >= 400:
                     error_message = response.text
                     try:
@@ -705,7 +711,9 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                             if 'Session' in error_message or 'expired' in error_message.lower() or 'authentication' in error_message.lower():
                                 logger.warning('ERP session expired. Re-authenticating...')
                                 cache.delete(ERP_SESSION_CACHE_KEY)
-                                return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
+                                if retry_count < 1:
+                                    return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note, retry_count=retry_count + 1)
+                                return _log_sync_error(weighing_record_id, "ERP API call failed: Session expired and re-authentication failed")
                     except (ValueError, KeyError):
                         pass
                     return _log_sync_error(weighing_record_id, f"create-commercial-bale failed with status {response.status_code}: {error_message}")
@@ -751,11 +759,12 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         "User-Agent": "insomnia/11.5.0",
                         "X-API-Key": api_key
                     }
+                    cookies = {'session_id': session_id} if session_id else None
                     if process_type in ['ctl_workflow', 'ctl_commercial_workflow']:
                         logger.info('Sending update-mass request to: %s', base_url)
                         logger.debug('Calling update-mass with params: %s', params)
                     start_time = time.time()
-                    response = requests.request("POST", base_url, data=payload, params=params, headers=headers)
+                    response = requests.request("POST", base_url, data=payload, params=params, headers=headers, cookies=cookies)
                     logger.info('ERP scaleserver response received in %.2f ms', (time.time() - start_time) * 1000)
                     logger.debug('update-mass response status: %s', response.status_code)
                     logger.debug('update-mass response text: %s', response.text)
@@ -773,7 +782,9 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         # Session may have expired - clear cache and retry once
                         logger.warning('ERP returned 403, session may have expired. Re-authenticating...')
                         cache.delete(ERP_SESSION_CACHE_KEY)
-                        return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
+                        if retry_count < 1:
+                            return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note, retry_count=retry_count + 1)
+                        return _log_sync_error(weighing_record_id, "ERP API call failed: Session expired and re-authentication failed")
                     elif response.status_code >= 400:
                         error_message = response.text
                         try:
@@ -784,7 +795,9 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                                 if 'Session' in error_message or 'expired' in error_message.lower() or 'authentication' in error_message.lower():
                                     logger.warning('ERP session expired. Re-authenticating...')
                                     cache.delete(ERP_SESSION_CACHE_KEY)
-                                    return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note)
+                                    if retry_count < 1:
+                                        return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note, retry_count=retry_count + 1)
+                                    return _log_sync_error(weighing_record_id, "ERP API call failed: Session expired and re-authentication failed")
                         except (ValueError, KeyError):
                             pass
                         return _log_sync_error(weighing_record_id, f"ERP API call failed with status {response.status_code}: {error_message}")
