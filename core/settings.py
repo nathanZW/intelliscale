@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-7fpb0_o#!+k-nn%^mt@1s-zrk0u1d0c%y$0vbuo#s*bdh8h%68'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
@@ -68,6 +68,9 @@ DATABASES = {
    'default': {
        'ENGINE': 'django.db.backends.sqlite3',
        'NAME': BASE_DIR / 'db.sqlite3',
+       'OPTIONS': {
+           'init_command': 'PRAGMA journal_mode=WAL;',
+       }
    }
 }
 
@@ -141,8 +144,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CELERY_BEAT_SCHEDULE = {
     'sync-odoo-delivery-notes': {
         'task': 'scale.tasks.sync_odoo_delivery_notes',
-        'schedule': 30.0#crontab(minute='*/2'),  # Every 2 minutes
-        # Or use: 'schedule': 60.0,  # Every 60 seconds
+        'schedule': 60.0,  # Every 60 seconds
     },
     'check-completed-delivery-notes': {
         'task': 'scale.tasks.check_completed_delivery_notes',
