@@ -962,6 +962,185 @@ def print_delivery_note(request, pk):
     
     return response
 
+@login_required
+@user_passes_test(is_admin)
+def print_dispatch_note(request, pk=None):
+    """Generate and return a professionally styled bulk PDF for CONFIRMATION OF DISPATCH"""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import BaseDocTemplate, PageTemplate, Frame, Table, TableStyle, Paragraph, Spacer, KeepTogether, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from io import BytesIO
+    from datetime import datetime
+    
+    # Get list of delivery notes
+    ids_str = request.GET.get('ids', '')
+    if pk:
+        delivery_notes = [get_object_or_404(DeliveryNote, pk=pk)]
+    elif ids_str:
+        ids_list = [int(i.strip()) for i in ids_str.split(',') if i.strip().isdigit()]
+        delivery_notes = list(DeliveryNote.objects.filter(id__in=ids_list))
+        if not delivery_notes:
+            return HttpResponse("No valid delivery notes selected.", status=400)
+    else:
+        return HttpResponse("No delivery note specified.", status=400)
+
+    buffer = BytesIO()
+    doc = BaseDocTemplate(
+        buffer, 
+        pagesize=landscape(A4),
+        leftMargin=0.5*inch,
+        rightMargin=0.5*inch,
+        topMargin=0.5*inch,
+        bottomMargin=0.5*inch
+    )
+    
+    styles = getSampleStyleSheet()
+    
+    # Styles
+    company_name_style = ParagraphStyle('CompanyName', parent=styles['Normal'], fontSize=12, fontName='Helvetica-Bold', textColor=colors.black)
+    company_address_style = ParagraphStyle('CompanyAddress', parent=styles['Normal'], fontSize=10, fontName='Helvetica', textColor=colors.black)
+    title_style = ParagraphStyle('DocTitle', parent=styles['Normal'], fontSize=18, fontName='Helvetica-Bold', textColor=colors.black, alignment=TA_RIGHT)
+    dispatch_info_style = ParagraphStyle('DispatchInfo', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.black, alignment=TA_RIGHT)
+    dispatch_val_style = ParagraphStyle('DispatchVal', parent=styles['Normal'], fontSize=10, fontName='Helvetica', textColor=colors.black, alignment=TA_RIGHT)
+    meta_label_style = ParagraphStyle('MetaLabel', parent=styles['Normal'], fontSize=11, fontName='Helvetica-Bold')
+    grower_header_style = ParagraphStyle('GrowerHeader', parent=styles['Normal'], fontSize=12, fontName='Helvetica-Bold', spaceBefore=15, spaceAfter=5, textColor=colors.HexColor('#1f2937'))
+    
+    def dispatch_header(canvas, doc):
+        canvas.saveState()
+        # Top-left company info
+        canvas.setFont('Helvetica-Bold', 12)
+        canvas.drawString(0.5*inch, 7.8*inch, "CURVERID TOBACCO (PVT) LTD")
+        canvas.setFont('Helvetica', 10)
+        canvas.drawString(0.5*inch, 7.6*inch, "28 SIMON MAZORODZE, SOUTHERTON")
+        canvas.drawString(0.5*inch, 7.45*inch, "+263 242 620243")
+        
+        # Top-right title
+        canvas.setFont('Helvetica-Bold', 18)
+        canvas.drawRightString(11.19*inch, 7.8*inch, "CONFIRMATION OF DISPATCH")
+        
+        # Dispatch info
+        # Aggregate totals from the query
+        total_scanned = sum(dn.scanned_bales_count for dn in delivery_notes)
+        total_expected = sum(dn.get_bale_count() or dn.scanned_bales_count for dn in delivery_notes)
+        # Use earliest dispatch created_at/updated_at or current date
+        if delivery_notes:
+            dispatch_date = delivery_notes[0].updated_at.strftime('%m/%d/%Y')
+        else:
+            dispatch_date = datetime.now().strftime('%m/%d/%Y')
+        
+        canvas.setFont('Helvetica-Bold', 10)
+        canvas.drawRightString(10.0*inch, 7.45*inch, "Dispatch Date:")
+        canvas.drawRightString(10.0*inch, 7.25*inch, "Dispatch Ref:")
+        canvas.drawRightString(10.0*inch, 7.05*inch, "Bales:")
+        
+        canvas.setFont('Helvetica', 10)
+        canvas.drawRightString(11.19*inch, 7.45*inch, dispatch_date)
+        canvas.drawRightString(11.19*inch, 7.25*inch, "________________") # Pen
+        canvas.drawRightString(11.19*inch, 7.05*inch, f"{total_scanned}/{total_expected}")
+        
+        # Driver info
+        canvas.setFont('Helvetica-Bold', 11)
+        canvas.drawString(0.5*inch, 7.0*inch, "Driver:")
+        canvas.drawString(1.5*inch, 7.0*inch, "________________________________")
+        canvas.drawString(4.5*inch, 7.0*inch, "Horse:")
+        canvas.drawString(5.5*inch, 7.0*inch, "________________________")
+        
+        canvas.drawString(4.5*inch, 6.7*inch, "Trailer:")
+        canvas.drawString(5.5*inch, 6.7*inch, "________________________")
+        
+        # Bottom Line Header
+        canvas.line(0.5*inch, 6.5*inch, 11.19*inch, 6.5*inch)
+        
+        canvas.restoreState()
+    
+    # We create two page templates:
+    # 1. First Page: Has the header, so frames start lower down.
+    # Landscape A4 is 11.69 x 8.27 inches.
+    left_frame_first = Frame(0.5*inch, 0.5*inch, 5.1*inch, 5.8*inch, id='col1_first')
+    right_frame_first = Frame(6.09*inch, 0.5*inch, 5.1*inch, 5.8*inch, id='col2_first')
+    first_page = PageTemplate(id='FirstPage', frames=[left_frame_first, right_frame_first], onPage=dispatch_header)
+    
+    # 2. Later Pages: No header, full height frames.
+    left_frame_later = Frame(0.5*inch, 0.5*inch, 5.1*inch, 7.27*inch, id='col1_later')
+    right_frame_later = Frame(6.09*inch, 0.5*inch, 5.1*inch, 7.27*inch, id='col2_later')
+    later_pages = PageTemplate(id='LaterPages', frames=[left_frame_later, right_frame_later])
+    
+    doc.addPageTemplates([first_page, later_pages])
+
+    elements = []
+
+    # Process all selected delivery notes and group by grower number.
+    grower_data = {}
+    
+    for dn in delivery_notes:
+        grower_no = str(dn.get_grower_number() or "Unknown Grower")
+        loc_name = str(dn.get_location_name() or "")
+        records = dn.get_scanned_records_data()
+        
+        if grower_no not in grower_data:
+            grower_data[grower_no] = []
+            
+        for rd in records:
+            mass_clean = rd.get('weight_display', '').replace('kg', '').strip()
+            row = [
+                rd.get('barcode', ''),
+                str(rd.get('group_number', '')),
+                str(rd.get('lot_number', '')),
+                mass_clean,
+                loc_name
+            ]
+            grower_data[grower_no].append(row)
+
+    # Sort growers
+    sorted_growers = sorted(list(grower_data.keys()))
+    
+    # Determine column widths for single table (5.1 inches total width per frame)
+    col_widths = [1.5*inch, 0.7*inch, 0.7*inch, 0.9*inch, 1.3*inch]
+    headers = ["Barcode", "Grp", "Lot", "Mass", "Location"]
+    
+    for grower in sorted_growers:
+        bales = grower_data[grower]
+        if not bales:
+            continue
+            
+        elements.append(Paragraph(f"Grower No: {grower}", grower_header_style))
+        
+        table_data = [headers] + bales
+        
+        t = Table(table_data, colWidths=col_widths, repeatRows=1)
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        
+        elements.append(t)
+        elements.append(Spacer(1, 10))
+
+    if not elements:
+        elements.append(Paragraph("No bales found for the selected delivery notes.", styles['Normal']))
+
+    # Flow into document
+    doc.build(elements)
+    
+    pdf = buffer.getvalue()
+    buffer.close()
+    
+    filename_suffix = "bulk" if not pk else str(pk)
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="dispatch_note_{filename_suffix}.pdf"'
+    response.write(pdf)
+    
+    return response
+
 
 @login_required
 def get_delivery_note_record(request, delivery_note_id):

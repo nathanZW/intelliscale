@@ -57,6 +57,7 @@ from .delivery_note import (
     recall_bale,
     close_commercial_delivery_note,
     print_delivery_note,
+    print_dispatch_note,
     get_delivery_note_record,
     find_delivery_note_by_barcode,
     search_delivery_notes,

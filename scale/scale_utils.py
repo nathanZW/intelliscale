@@ -90,11 +90,15 @@ def parse_weight_from_bytes(line):
         # --- Format 2: Unit-suffixed (e.g. "+ 1.23 kg" or "  39.5 KG G") ---
         # A valid packet from this scale is typically ~11+ characters long.
         # A fragment like "5 KG G" is only 6 characters.
-        numeric_match = re.search(r'([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', part, re.IGNORECASE)
+        # We use a strict match. It must have boundaries so it doesn't just
+        # rip a number out of the middle of a garbled string.
+        # This regex looks for: Start of string -> Optional sign -> Number -> spaces -> Unit -> Word Boundary
+        numeric_match = re.search(r'^([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', part, re.IGNORECASE)
         if numeric_match:
-            # If the original string was incredibly short (e.g. < 9 chars), it's almost certainly a fragment,
+            # If the original string was incredibly short (e.g. < 12 chars), it's almost certainly a fragment,
             # NOT a cleanly outputted scale payload which always has padding.
-            if original_len < 9:
+            # E.g. "   120.0 KG G" = 14 chars. A chopped "  0.0 KG G" = 10 chars.
+            if original_len < 13:
                  continue
                  
             num_str = numeric_match.group(1).replace(',', '').replace(' ', '')
