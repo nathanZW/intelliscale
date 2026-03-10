@@ -95,11 +95,16 @@ def parse_weight_from_bytes(line):
         # This regex looks for: Start of string -> Optional sign -> Number -> spaces -> Unit -> Word Boundary
         numeric_match = re.search(r'^([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', part, re.IGNORECASE)
         if numeric_match:
-            # If the original string was incredibly short (e.g. < 12 chars), it's almost certainly a fragment,
-            # NOT a cleanly outputted scale payload which always has padding.
-            # E.g. "   120.0 KG G" = 14 chars. A chopped "  0.0 KG G" = 10 chars.
-            if original_len < 13:
-                 continue
+            # Protect against mid-packet UART byte drops for scales that output space-padded "KG G" / "KG N" formats.
+            # A valid string like "   39.5 KG G" is exactly 12 characters before stripping.
+            # A dropped packet mid-transmission like "  1.0 KG G" is 10 chars.
+            if part.upper().endswith('KG G') or part.upper().endswith('KG N'):
+                if original_len < 12:
+                    continue
+            else:
+                # Generic scale payload protection against bizarre 3-character drops like "1kg"
+                if original_len < 4:
+                    continue
                  
             num_str = numeric_match.group(1).replace(',', '').replace(' ', '')
             try:
