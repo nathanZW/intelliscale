@@ -162,8 +162,8 @@ TEST_SCENARIOS = [
     {
         "name": "Negative Weight (Tare Underflow)",
         "chunks": [b"    -1.5 KG G\r\n"],
-        "expected_weight": None,
-        "description": "Scale in tare-underflow; negative readings should be rejected."
+        "expected_weight": -1.5,
+        "description": "Scale in tare mode; negative readings represent tare weight and should be displayed."
     },
     {
         "name": "Unrealistically Large Weight",
@@ -315,8 +315,8 @@ TEST_SCENARIOS = [
     {
         "name": "Status Prefix (A&D / MT-SICS) Negative",
         "chunks": [b"ST,GS,-   2.0kg\r\n"],
-        "expected_weight": None,
-        "description": "Negative weights should be rejected even with status prefix"
+        "expected_weight": -2.0,
+        "description": "Negative weights represent tare and should be accepted with status prefix"
     },
 
 

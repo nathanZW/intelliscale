@@ -119,7 +119,7 @@ def parse_weight_from_bytes(line):
             num_str = numeric_match.group(1).replace(',', '.').replace(' ', '')
             try:
                 weight = float(num_str)
-                if weight < 0 or weight > 5000:
+                if weight > 5000:
                     continue
                 
                 return weight, part
@@ -140,7 +140,7 @@ def parse_weight_from_bytes(line):
                 
             try:
                 weight = float(numeric_only.group(1).replace(',', '.'))
-                if weight < 0 or weight > 5000:
+                if weight > 5000:
                     continue
                 return weight, part
             except ValueError:
