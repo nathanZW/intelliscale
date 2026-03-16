@@ -92,9 +92,19 @@ def parse_weight_from_bytes(line):
         # A fragment like "5 KG G" is only 6 characters.
         # We use a strict match. It must have boundaries so it doesn't just
         # rip a number out of the middle of a garbled string.
-        # This regex looks for: Start of string -> Optional sign -> Number -> spaces -> Unit -> Word Boundary
-        numeric_match = re.search(r'^([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', part, re.IGNORECASE)
+        # This regex looks for: Optional sign -> Number -> spaces -> Unit -> Word Boundary
+        numeric_match = re.search(r'([-+]?\s*\d+(?:[.,]\d+)?)\s*(kg|g|lbs|lb|pd)\b', part, re.IGNORECASE)
         if numeric_match:
+            # Reject if there are plausible numbers/letters before the match. This ensures
+            # we don't extract "5.0" out of a fragmented "3.5.0", while allowing \x00-\x1f noise.
+            prefix = part[:numeric_match.start()]
+            
+            # Allow common scale prefixes like ST,GS, or US,NT,
+            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix).strip()
+            
+            if re.search(r'[a-zA-Z0-9.,]', prefix_stripped):
+                continue
+                
             # Protect against mid-packet UART byte drops for scales that output space-padded "KG G" / "KG N" formats.
             # A valid string like "   39.5 KG G" is exactly 12 characters before stripping.
             # A dropped packet mid-transmission like "  1.0 KG G" is 10 chars.
@@ -106,19 +116,32 @@ def parse_weight_from_bytes(line):
                 if original_len < 4:
                     continue
                  
-            num_str = numeric_match.group(1).replace(',', '').replace(' ', '')
+            num_str = numeric_match.group(1).replace(',', '.').replace(' ', '')
             try:
                 weight = float(num_str)
+                if weight < 0 or weight > 5000:
+                    continue
+                
                 return weight, part
             except ValueError:
                 pass
         
         # --- Format 3: Simple numeric fallback ---
         # Only parse if the part is PURELY numeric, preventing ".5 KG G" from becoming "5.0".
-        numeric_only = re.match(r'^\s*([-+]?\d+(?:[.,]\d+)?)\s*$', part)
+        numeric_only = re.search(r'([-+]?\d+(?:[.,]\d+)?)\s*$', part)
         if numeric_only:
+            prefix = part[:numeric_only.start()]
+            
+            # Allow common scale prefixes like ST,GS, or US,NT,
+            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix).strip()
+            
+            if re.search(r'[a-zA-Z0-9.,]', prefix_stripped):
+                continue
+                
             try:
-                weight = float(numeric_only.group(1).replace(',', ''))
+                weight = float(numeric_only.group(1).replace(',', '.'))
+                if weight < 0 or weight > 5000:
+                    continue
                 return weight, part
             except ValueError:
                 pass
