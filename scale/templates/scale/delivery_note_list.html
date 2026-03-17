@@ -351,7 +351,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const rows = document.querySelectorAll('tbody tr');
             
             rows.forEach(row => {
-                const deliveryNoteCell = row.cells[0];
+                const deliveryNoteCell = row.cells[1];
                 if (deliveryNoteCell) {
                     // Get text content but exclude the "ACTIVE" badge text if possible, 
                     // though simple inclusion check usually works fine as long as user types the number.
