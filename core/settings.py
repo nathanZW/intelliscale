@@ -146,10 +146,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'scale.tasks.sync_odoo_delivery_notes',
         'schedule': 60.0,  # Every 60 seconds
     },
-    'check-completed-delivery-notes': {
-        'task': 'scale.tasks.check_completed_delivery_notes',
-        'schedule': crontab(minute='*/1'),  # Every 1 minute
-    },
+    # 'check-completed-delivery-notes': {
+    #     'task': 'scale.tasks.check_completed_delivery_notes',
+    #     'schedule': crontab(minute='*/1'),  # Every 1 minute
+    # },
 }
 
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
