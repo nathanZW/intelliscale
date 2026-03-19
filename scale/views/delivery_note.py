@@ -429,7 +429,10 @@ def recall_bale(request, pk):
     """Handle individual bale recall requests"""
     if request.method == 'POST':
         delivery_note = get_object_or_404(DeliveryNote, pk=pk)
-        barcode = request.POST.get('barcode', '').strip()
+        raw_barcode = request.POST.get('barcode', '')
+        active_process = WeighingProcess.objects.filter(is_active=True).first()
+        allow_spaces = active_process.allow_spaces_in_barcode if active_process else False
+        barcode = raw_barcode if allow_spaces else raw_barcode.strip()
         
         if not barcode:
             return JsonResponse({
@@ -1229,7 +1232,12 @@ def find_delivery_note_by_barcode(request):
         return JsonResponse({'success': False, 'message': 'Only POST requests allowed'})
 
     try:
-        barcode = request.POST.get('barcode', '').strip()
+        raw_barcode = request.POST.get('barcode', '')
+        
+        # Determine if we should allow spaces in barcodes based on the active process
+        active_process_for_spaces = WeighingProcess.objects.filter(is_active=True).first()
+        allow_spaces = active_process_for_spaces.allow_spaces_in_barcode if active_process_for_spaces else False
+        barcode = raw_barcode if allow_spaces else raw_barcode.strip()
         if not barcode:
             return JsonResponse({'success': False, 'message': 'Barcode is required'})
 

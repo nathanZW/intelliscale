@@ -61,7 +61,10 @@ def recall_and_update_bale(request):
         return JsonResponse({'success': False, 'message': 'Invalid request method'})
 
     try:
-        barcode = request.POST.get('barcode', '').strip()
+        raw_barcode = request.POST.get('barcode', '')
+        active_process = WeighingProcess.objects.filter(is_active=True).first()
+        allow_spaces = active_process.allow_spaces_in_barcode if active_process else False
+        barcode = raw_barcode if allow_spaces else raw_barcode.strip()
         delivery_note_id = request.POST.get('delivery_note_id')
 
         if not all([barcode, delivery_note_id]):
