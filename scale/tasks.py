@@ -106,24 +106,29 @@ def sync_single_delivery_note(odoo_record):
         )
         
         # Update with Odoo data
-        delivery_note.odoo_data = odoo_record
-        delivery_note.delivery_note_number = document_number
+        partner_id = delivery_note.partner_id
         # Note: partner_id is IntegerField, but grower_number is string like "V342819"
         # Store grower_number in odoo_data, extract numeric part if needed
         grower_number = odoo_record.get('grower_number', '')
         if grower_number.startswith('V') and grower_number[1:].isdigit():
-            delivery_note.partner_id = int(grower_number[1:])  # Extract numeric part
-        delivery_note.is_synced = True
-        delivery_note.last_sync_attempt = timezone.now()
-        delivery_note.sync_error_message = ''
-        
+            partner_id = int(grower_number[1:])  # Extract numeric part
+            
         # Map Odoo state to your status
-        if odoo_record['state'] in ['open', 'checked', 'laid']:
-            delivery_note.status = 'Open'
-        else:  # 'closed'
-            delivery_note.status = 'Closed'
-        
-        delivery_note.save()
+        if odoo_record['state'] in ['open', 'checked']:
+            mapped_status = 'Open'
+        else:  # 'laid', 'closed', etc.
+            mapped_status = 'Closed'
+            
+        # Use update() instead of save() to avoid overwriting fields modified by other operations
+        DeliveryNote.objects.filter(pk=delivery_note.pk).update(
+            odoo_data=odoo_record,
+            delivery_note_number=document_number,
+            partner_id=partner_id,
+            is_synced=True,
+            last_sync_attempt=timezone.now(),
+            sync_error_message='',
+            status=mapped_status
+        )
         
         action = "Created" if created else "Updated"
         print(f"[SYNC TASK]   + {action} delivery note: {document_number}")
@@ -165,6 +170,18 @@ def check_completed_delivery_notes():
             try:
                 # Check if all bales are scanned and Odoo state is still 'checked'
                 odoo_state = dnote.odoo_data.get('state', '').lower()
+                
+                # Validation guard against race conditions
+                from .models import WeighingRecord
+                actual_records = WeighingRecord.objects.filter(
+                    delivery_note=dnote, is_synced=True
+                ).count()
+                
+                if actual_records < dnote.scanned_bales_count:
+                    logger.warning("Mismatch: scanned_count=%s but only %s records for dnote %s", 
+                                   dnote.scanned_bales_count, actual_records, dnote.delivery_note_number)
+                    continue
+
                 if dnote.is_scanning_complete() and odoo_state == 'checked':
                     # Update status to completed and send notification to Odoo
                     success = update_dnote_completion_status(dnote)

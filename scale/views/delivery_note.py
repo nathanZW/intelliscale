@@ -156,6 +156,10 @@ def recall_delivery_note(request, pk):
                     # Reset scanned count and other local stats
                     delivery_note.scanned_barcodes = []
                     delivery_note.scanned_bales_count = 0
+                    delivery_note.status = 'Open'
+                    delivery_note.is_being_scanned = False
+                    if delivery_note.odoo_data and isinstance(delivery_note.odoo_data, dict):
+                        delivery_note.odoo_data['state'] = 'checked'
                     delivery_note.save()
                     
                 messages.success(request, "Delivery note recalled successfully. Weighing records have been deleted.")
@@ -551,6 +555,24 @@ def recall_bale(request, pk):
                     delivery_note=delivery_note,
                     barcode=barcode
                 ).delete()
+                
+                # BUG-005 FIX: If Odoo state is laid, make another API call to set it to checked
+                if delivery_note.odoo_data and delivery_note.odoo_data.get('state') == 'laid':
+                    status_url = f"{company_settings.api_url}/api/grower-delivery-notes/update-status"
+                    status_params = {
+                        "document_number": delivery_note.delivery_note_number,
+                        "status": "checked"
+                    }
+                    try:
+                        status_res = requests.post(status_url, params=status_params, headers=headers, timeout=10)
+                        if status_res.status_code in [200, 201]:
+                            delivery_note.odoo_data['state'] = 'checked'
+                            # It's now open again since a bale was removed
+                            delivery_note.status = 'Open'
+                            delivery_note.save()
+                    except Exception as e:
+                        logger.error('Failed to change status back to checked during recall_bale: %s', e)
+
                 return JsonResponse({
                     'success': True,
                     'message': f'Bale {barcode} has been successfully recalled.',

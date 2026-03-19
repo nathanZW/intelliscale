@@ -102,8 +102,8 @@ def recall_and_update_bale(request):
                 print(f"Recall and Update: Hessian ID: '{hessian_id}'")
         
         # Build the API URL with required parameters like in send_to_erp (only scale_id and hessian_id)
-        # Use 2 decimal places format like the weighing records (instead of rounding to whole number)
-        base_url = f"{company_settings.api_url}/api/bales/update-mass/?barcode={barcode}&mass=0.01&scale_id={scale_id}"
+        # Use the recall-bale endpoint instead of update-mass for complete 0 mass
+        base_url = f"{company_settings.api_url}/api/bales/recall-bale/?barcode={barcode}&scale_id={scale_id}"
         if hessian_id:
             api_url = f"{base_url}&hessian_id={hessian_id}"
             print(f"Recall and Update: Using hessian in API URL: {api_url}")
@@ -122,6 +122,24 @@ def recall_and_update_bale(request):
         print(f"Recall and Update: ERP response text: {response.text}")
 
         if response.status_code == 200:
+            # BUG-005 FIX: If Odoo state is laid, make another API call to set it to checked
+            if delivery_note.odoo_data and delivery_note.odoo_data.get('state') == 'laid':
+                status_url = f"{company_settings.api_url}/api/grower-delivery-notes/update-status"
+                status_params = {
+                    "document_number": delivery_note.delivery_note_number,
+                    "status": "checked"
+                }
+                try:
+                    status_res = requests.post(status_url, params=status_params, headers=headers, timeout=10)
+                    if status_res.status_code in [200, 201]:
+                        delivery_note.odoo_data['state'] = 'checked'
+                        delivery_note.status = 'Open'
+                        delivery_note.save()
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error('Failed to change status back to checked during recall_and_update_bale: %s', e)
+
             # If ERP update is successful, delete the local record so the barcode can be scanned again
             weighing_record = WeighingRecord.objects.filter(
                 delivery_note=delivery_note,
