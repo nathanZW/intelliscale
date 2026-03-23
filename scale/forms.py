@@ -129,6 +129,7 @@ class WeighingProcessForm(forms.ModelForm):
             'rolling_hessian',
             'rolling_grower_number',
             'auto_save_on_scan',
+            'send_simple_request',
             'is_active',
             'process_type'
         ]
@@ -180,6 +181,9 @@ class WeighingProcessForm(forms.ModelForm):
             'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
         }),
         'auto_save_on_scan': forms.CheckboxInput(attrs={
+            'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
+        }),
+        'send_simple_request': forms.CheckboxInput(attrs={
             'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
         }),
     }

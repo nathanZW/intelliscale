@@ -28,6 +28,7 @@ class WeighingProcess(models.Model):
     rolling_hessian = models.BooleanField(default=False, help_text="If enabled, pre-populates the hessian value from the previous weighing record for the same delivery note.")
     rolling_grower_number = models.BooleanField(default=False, help_text="If enabled, pre-populates the grower number from the previous weighing record for this process.")
     auto_save_on_scan = models.BooleanField(default=False, help_text="If enabled, scanning a barcode will automatically trigger a save.")
+    send_simple_request = models.BooleanField(default=False)
     
     def __str__(self):
         return self.name

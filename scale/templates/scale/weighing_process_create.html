@@ -289,6 +289,19 @@
                         barcode is scanned and Enter is pressed.</p>
                 </div>
 
+                <!-- Send Simple Request (visible only for Manual process type) -->
+                <div id="send-simple-request-container" style="display: none;">
+                    <label for="{{ form.send_simple_request.id_for_label }}"
+                        class="block text-sm font-medium text-zinc-700">Send Simple Request</label>
+                    <div class="mt-1">
+                        {{ form.send_simple_request }}
+                    </div>
+                    {% if form.send_simple_request.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.send_simple_request.errors }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-zinc-500">If enabled, uses a simpler ERP request format (mass and barcode only).</p>
+                </div>
+
                 <!-- Status -->
                 <div>
                     <div class="flex items-center mt-1">
@@ -329,4 +342,22 @@
         </form>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var processTypeSelect = document.getElementById('{{ form.process_type.id_for_label }}');
+        var simpleRequestContainer = document.getElementById('send-simple-request-container');
+
+        function toggleSimpleRequest() {
+            if (processTypeSelect.value === 'Manual') {
+                simpleRequestContainer.style.display = '';
+            } else {
+                simpleRequestContainer.style.display = 'none';
+            }
+        }
+
+        processTypeSelect.addEventListener('change', toggleSimpleRequest);
+        toggleSimpleRequest();
+    });
+</script>
 {% endblock %}
