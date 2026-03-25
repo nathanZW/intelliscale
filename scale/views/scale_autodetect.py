@@ -11,16 +11,22 @@ Settings (optional, with defaults):
 """
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-import re
 
 import serial
 import serial.tools.list_ports
 from django.conf import settings
 
+from ..scale_utils import (
+    parse_weight_from_bytes,
+    read_weight_from_serial,
+    open_scale_serial,
+    is_candidate_serial_port
+)
+
 
 @dataclass
 class ScaleReadResult:
-    mass: int
+    mass: float
     raw_payload: str
     serial_port: str
 
@@ -40,39 +46,15 @@ class ScaleReadError(Exception):
 
 
 def parse_mass(raw_text):
-    """Extract a mass value from raw scale output using multiple strategies."""
-    cleaned = raw_text.strip().replace('=', ' ')
-
-    match = re.search(r'(-?\d+(?:\.\d+)?)', cleaned)
-    if match:
-        return int(Decimal(match.group(1)))
-
-    legacy_slice = cleaned[5:8].strip()
-    if re.fullmatch(r'\d+(?:\.\d+)?', legacy_slice):
-        try:
-            return int(Decimal(legacy_slice))
-        except InvalidOperation:
-            pass
-
-    for start, stop in ((5, 8), (7, 14)):
-        fragment = cleaned[start:stop].strip()
-        if not fragment:
-            continue
-        try:
-            return int(Decimal(fragment))
-        except InvalidOperation:
-            continue
+    """Extract a mass value from raw scale output using our shared robust parser."""
+    # Note: parse_weight_from_bytes expects bytes, so we encode back if needed,
+    # or just use it on the raw bytes earlier.
+    # For compatibility with existing callers, we'll try to parse the string.
+    weight, raw_str = parse_weight_from_bytes(raw_text.encode('utf-8'))
+    if weight is not None:
+        return weight
 
     raise ScaleReadError(f'Unable to parse a mass value from scale payload: {raw_text!r}')
-
-
-def _is_candidate_port(device):
-    """Check if a serial port device name matches known scale port patterns."""
-    return (
-        device.find('ttyUSB') != -1
-        or device.find('serial') != -1
-        or device.find('COM') != -1
-    )
 
 
 def inspect_scale_connections():
@@ -83,12 +65,11 @@ def inspect_scale_connections():
     it can be opened successfully.
     """
     baudrate = getattr(settings, 'SCALE_BAUDRATE', 9600)
-    timeout = 1
     statuses = []
 
     for comport in serial.tools.list_ports.comports():
         device = comport.device
-        candidate = _is_candidate_port(device)
+        candidate = is_candidate_serial_port(device)
         status = ScalePortStatus(
             device=device,
             description=comport.description or 'n/a',
@@ -98,11 +79,16 @@ def inspect_scale_connections():
         )
 
         if candidate:
+            ser = None
             try:
-                with serial.Serial(device, baudrate=baudrate, timeout=timeout):
-                    status.available = True
+                # Use our robust opener which disables DTR/RTS
+                ser = open_scale_serial(device, baudrate=baudrate, timeout=1)
+                status.available = True
             except (OSError, serial.SerialException) as exc:
                 status.error = str(exc)
+            finally:
+                if ser:
+                    ser.close()
 
         statuses.append(status)
 
@@ -112,9 +98,8 @@ def inspect_scale_connections():
 def scale_connect():
     """Auto-detect a scale, connect, read weight, and return a ScaleReadResult.
 
-    Scans all serial ports for candidate devices (ttyUSB, serial, COM),
-    connects to the first available one, reads raw bytes, parses mass,
-    and returns a ScaleReadResult dataclass.
+    Scans all serial ports for candidate devices, connects to the first available one,
+    reads weight using robust helpers, and returns a ScaleReadResult dataclass.
 
     Raises ScaleReadError if no port is found or no data is returned.
     """
@@ -127,9 +112,10 @@ def scale_connect():
     for comport in serial.tools.list_ports.comports():
         device = comport.device
 
-        if _is_candidate_port(device):
+        if is_candidate_serial_port(device):
             try:
-                ser = serial.Serial(device, baudrate=baudrate, timeout=timeout)
+                # Use robust opener
+                ser = open_scale_serial(device, baudrate=baudrate, timeout=timeout)
                 scale_connected = True
                 break
             except (OSError, serial.SerialException) as exc:
@@ -139,35 +125,25 @@ def scale_connect():
         raise ScaleReadError(last_error or 'Failed to connect to Serial Port Connection')
 
     try:
-        try:
-            ser.reset_input_buffer()
-        except (AttributeError, OSError, serial.SerialException):
-            pass
+        # Use robust reader
+        line = read_weight_from_serial(ser)
 
-        try:
-            scale_string = ser.read(32)
-            if not scale_string:
-                scale_string = ser.readline()
-        except (OSError, serial.SerialException) as exc:
-            raise ScaleReadError(
-                'The scale port became unavailable while reading. '
-                'Disconnect any other app using the scale and try again.'
-            ) from exc
-
-        if not scale_string:
+        if not line:
             raise ScaleReadError(
                 'No data was returned from the connected scale. '
                 'Check the cable, scale output mode, or port access.'
             )
 
-        raw_text = scale_string.decode('utf-8', errors='ignore').strip()
-        mass = parse_mass(raw_text)
-        return ScaleReadResult(mass=mass, raw_payload=raw_text, serial_port=ser.port)
+        # Use robust parser
+        weight, raw_str = parse_weight_from_bytes(line)
+
+        if weight is None:
+            raise ScaleReadError(f'Unable to parse a mass value from scale payload: {raw_str!r}')
+
+        return ScaleReadResult(mass=weight, raw_payload=raw_str, serial_port=ser.port)
     finally:
-        try:
+        if ser:
             ser.close()
-        except (AttributeError, OSError, serial.SerialException):
-            pass
 
 
 def read_scale():

@@ -10,7 +10,12 @@ import time
 import serial
 import serial.tools.list_ports
 import logging
-from scale.scale_utils import parse_weight_from_bytes, read_weight_from_serial
+from scale.scale_utils import (
+    parse_weight_from_bytes, 
+    read_weight_from_serial, 
+    open_scale_serial, 
+    run_with_retry
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +68,12 @@ def _read_weight_from_scale(scale):
     Returns:
         (weight: float, unit: str) or (None, None) on failure
     """
-    ser = None
-    try:
-        # Open with the scale's configured serial parameters
+    def do_read():
+        ser = None
         try:
-            ser = serial.Serial(
+            # Open with the scale's configured serial parameters using our robust helper
+            # which disables DTR/RTS to prevent hardware resets.
+            ser = open_scale_serial(
                 port=scale.com_port,
                 baudrate=scale.baud_rate or 9600,
                 timeout=scale.timeout or 2,
@@ -75,34 +81,38 @@ def _read_weight_from_scale(scale):
                 stopbits=scale.stop_bits or 1,
                 bytesize=scale.data_bits or 8
             )
-        except serial.SerialException:
-            # Fallback: open with just port and timeout
-            ser = serial.Serial(scale.com_port, timeout=scale.timeout or 2)
 
-        if ser.is_open:
-            # Use shared multi-strategy reader (raw → MT-SICS → CR/LF)
-            line = read_weight_from_serial(ser)
-            
-            if not line:
-                return None, None
+            if ser.is_open:
+                # Use shared multi-strategy reader (raw → MT-SICS → CR/LF)
+                line = read_weight_from_serial(ser)
+                
+                if not line:
+                    return None, None
 
-            # Use shared format-aware parser
-            weight, raw_str = parse_weight_from_bytes(line)
-            
-            if weight is not None:
-                # Extract unit if present in raw string
-                import re
-                unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
-                unit = unit_match.group(1).lower() if unit_match else 'kg'
-                return weight, unit
+                # Use shared format-aware parser
+                weight, raw_str = parse_weight_from_bytes(line)
+                
+                if weight is not None:
+                    # Extract unit if present in raw string
+                    import re
+                    unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
+                    unit = unit_match.group(1).lower() if unit_match else 'kg'
+                    return weight, unit
 
+            return None, None
+        finally:
+            if ser and ser.is_open:
+                ser.close()
+
+    try:
+        # Wrap reading in a retry loop to handle transient serial port contention
+        return run_with_retry(do_read, max_retries=3, delay=0.1)
+    except serial.SerialException as e:
+        logger.warning(f"Failed to read from scale {scale.name} after retries: {e}")
         return None, None
-
-    except serial.SerialException:
+    except Exception as e:
+        logger.error(f"Error reading from scale {scale.name}: {e}")
         return None, None
-    finally:
-        if ser and ser.is_open:
-            ser.close()
 
 
 def _try_auto_detect_port(scale):

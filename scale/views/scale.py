@@ -15,7 +15,12 @@ import serial
 import serial.tools.list_ports
 import re
 import time
-from ..scale_utils import parse_weight_from_bytes, read_weight_from_serial
+from ..scale_utils import (
+    parse_weight_from_bytes, 
+    read_weight_from_serial,
+    open_scale_serial,
+    run_with_retry
+)
 from .scale_autodetect import scale_connect as autodetect_connect, ScaleReadError
 
 
@@ -364,33 +369,25 @@ def get_weight(request, scale_id):
                     })
 
             # Try to read from the scale
-            ser = None
-            try:
-                if scale.mettler_toledo or scale.connection_mode == 'mettler':
-                    # Mettler Toledo mode: configurable serial params + protocol-aware reading
-                    try:
-                        ser = serial.Serial(
-                            port=scale.com_port,
-                            baudrate=scale.baud_rate or 9600,
-                            timeout=scale.timeout or 1,
-                            parity=scale.parity or 'N',
-                            stopbits=scale.stop_bits or 1,
-                            bytesize=scale.data_bits or 8
-                        )
-                    except serial.SerialException:
-                        # Fallback: open with just port and timeout
-                        ser = serial.Serial(scale.com_port, timeout=scale.timeout or 1)
+            def do_read():
+                ser = None
+                try:
+                    # Use our robust helper which handles DTR/RTS and stabilization
+                    ser = open_scale_serial(
+                        port=scale.com_port,
+                        baudrate=scale.baud_rate or 9600,
+                        timeout=scale.timeout or 1,
+                        parity=scale.parity or 'N',
+                        stopbits=scale.stop_bits or 1,
+                        bytesize=scale.data_bits or 8
+                    )
                     
                     if ser.is_open:
                         # Read response using protocol-aware helper
                         line = read_weight_from_serial(ser)
                         
                         if not line:
-                            print(f"Scale {scale.name} connected but returned no data.")
-                            return JsonResponse({
-                                'success': False,
-                                'message': 'Scale connected but returned no data. Check connection and scale settings.'
-                            })
+                            return None, "Scale connected but returned no data."
 
                         # Parse weight using format-aware parser
                         weight, raw_str = parse_weight_from_bytes(line)
@@ -400,43 +397,29 @@ def get_weight(request, scale_id):
                         print(f"Scale {scale.name}: weight={weight} raw={raw_preview}")
 
                         if weight is not None:
-                            return JsonResponse({
-                                'success': True,
-                                'weight': weight
-                            })
+                            return weight, None
                         else:
-                            print(f"No numeric weight found in '{raw_str}' for scale {scale.name}")
-                            return JsonResponse({
-                                'success': False,
-                                'message': f'No numeric weight found in: {raw_str}'
-                            })
+                            return None, f"No numeric weight found in: {raw_str}"
+                    return None, "Could not open serial port."
+                finally:
+                    if ser and ser.is_open:
+                        ser.close()
+
+            try:
+                # Wrap in retry loop to handle contention with satellite service
+                weight, error_message = run_with_retry(do_read, max_retries=3, delay=0.1)
+                
+                if weight is not None:
+                    return JsonResponse({
+                        'success': True,
+                        'weight': weight
+                    })
                 else:
-                    # Default mode: original behaviour
-                    ser = serial.Serial(scale.com_port, 9600, timeout=2)
-                    if ser.is_open:
-                        # Read response using protocol-aware helper
-                        line = read_weight_from_serial(ser)
-                        # Parse weight using format-aware parser
-                        weight, raw_str = parse_weight_from_bytes(line)
-                        
-                        # Concise log: show weight + truncated raw bytes
-                        raw_preview = repr(line[:60]) + ('...' if len(line) > 60 else '')
-                        print(f"Scale {scale.name}: weight={weight} raw={raw_preview}")
-
-                        if weight is not None:
-                            return JsonResponse({
-                                'success': True,
-                                'weight': weight
-                            })
-                        else:
-                            print(f"No numeric weight found in '{raw_str}' for scale {scale.name}")
-                            return JsonResponse({
-                                'success': False,
-                                'message': f'No numeric weight found in: {raw_str}'
-                            })
-                        
+                    return JsonResponse({
+                        'success': False,
+                        'message': error_message or 'Failed to read weight'
+                    })
             except serial.SerialException as e:
-                print(f"SerialException for scale {scale.name}: {str(e)}")
                 return JsonResponse({
                     'success': False,
                     'message': f'Error reading from scale: {str(e)}'
@@ -504,120 +487,65 @@ def get_current_weight_api(request, scale_id):
                 })
         
         # Fallback: direct serial read (original behaviour when satellite is off)
-
-        # Auto-detect mode
-        if scale.connection_mode == 'autodetect':
+        def do_read_direct():
+            ser = None
             try:
-                result = autodetect_connect()
-                gross_weight = int(result.mass)
-                net_weight = gross_weight - tare_weight
-                return JsonResponse({
-                    'success': True,
-                    'weight': net_weight,
-                    'gross_weight': gross_weight,
-                    'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                    'scale_name': scale.name,
-                    'serial_port': result.serial_port,
-                })
-            except ScaleReadError as e:
-                return JsonResponse({
-                    'success': False,
-                    'message': str(e)
-                })
-
-        if not scale.com_port:
-            return JsonResponse({
-                'success': False,
-                'message': f'Scale {scale.name} does not have a COM port configured'
-            }, status=400)
-
-        ser = None
-        try:
-            if scale.mettler_toledo or scale.connection_mode == 'mettler':
-                # Mettler Toledo mode: configurable serial params + protocol-aware reading
-                try:
-                    ser = serial.Serial(
-                        port=scale.com_port,
-                        baudrate=scale.baud_rate or 9600,
-                        timeout=scale.timeout or 1,
-                        parity=scale.parity or 'N',
-                        stopbits=scale.stop_bits or 1,
-                        bytesize=scale.data_bits or 8
-                    )
-                except serial.SerialException:
-                    # Fallback: open with just port and timeout
-                    ser = serial.Serial(scale.com_port, timeout=scale.timeout or 1)
+                # Use our robust helper which handles DTR/RTS and stabilization
+                ser = open_scale_serial(
+                    port=scale.com_port,
+                    baudrate=scale.baud_rate or 9600,
+                    timeout=scale.timeout or 1,
+                    parity=scale.parity or 'N',
+                    stopbits=scale.stop_bits or 1,
+                    bytesize=scale.data_bits or 8
+                )
                 
                 if ser.is_open:
                     # Read response using protocol-aware helper
                     line = read_weight_from_serial(ser)
                     
                     if not line:
-                         return JsonResponse({
-                            'success': False,
-                            'message': 'Scale connected but returned no data.'
-                        })
+                        return None, "Scale connected but returned no data.", None
 
                     # Parse weight using format-aware parser
                     weight, raw_str = parse_weight_from_bytes(line)
                     
                     if weight is not None:
-                        net_weight = weight - tare_weight
-                        return JsonResponse({
-                            'success': True,
-                            'weight': net_weight,
-                            'gross_weight': weight,
-                            'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                            'scale_name': scale.name
-                        })
-                    else:
-                        return JsonResponse({
-                            'success': False,
-                            'message': f'No numeric weight found in: {raw_str}'
-                        })
-            else:
-                # Default mode: original behaviour
-                ser = serial.Serial(scale.com_port, 9600, timeout=2)
-                if ser.is_open:
-                    # Read response using protocol-aware helper
-                    line = read_weight_from_serial(ser)
-                    if not line:
-                         return JsonResponse({
-                            'success': False,
-                            'message': 'Scale connected but returned no data.'
-                        })
-
-                    # Parse weight using format-aware parser
-                    weight, raw_str = parse_weight_from_bytes(line)
-                    
-                    if weight is not None:
-                        net_weight = weight - tare_weight
                         # Extract unit if present
                         unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
                         unit = unit_match.group(1).lower() if unit_match else 'kg'
-                        
-                        return JsonResponse({
-                            'success': True,
-                            'weight': net_weight,
-                            'gross_weight': weight,
-                            'unit': unit,
-                            'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                            'scale_name': scale.name
-                        })
+                        return weight, None, unit
                     else:
-                        return JsonResponse({
-                            'success': False,
-                            'message': f'No numeric weight found in: {raw_str}'
-                        })
-                    
+                        return None, f"No numeric weight found in: {raw_str}", None
+                return None, "Could not open serial port.", None
+            finally:
+                if ser and ser.is_open:
+                    ser.close()
+
+        try:
+            # Wrap in retry loop 
+            weight, error_message, unit = run_with_retry(do_read_direct, max_retries=3, delay=0.1)
+            
+            if weight is not None:
+                net_weight = weight - tare_weight
+                return JsonResponse({
+                    'success': True,
+                    'weight': net_weight,
+                    'gross_weight': weight,
+                    'unit': unit or 'kg',
+                    'scale_id': str(scale.scale_id) if scale.scale_id else None,
+                    'scale_name': scale.name
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'message': error_message or 'Failed to read weight'
+                })
         except serial.SerialException as e:
             return JsonResponse({
                 'success': False,
                 'message': f'Error reading from scale: {str(e)}'
             })
-        finally:
-            if ser and ser.is_open:
-                ser.close()
                 
     except Exception as e:
         return JsonResponse({
