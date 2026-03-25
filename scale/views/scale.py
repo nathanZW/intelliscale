@@ -16,6 +16,7 @@ import serial.tools.list_ports
 import re
 import time
 from ..scale_utils import parse_weight_from_bytes, read_weight_from_serial
+from .scale_autodetect import scale_connect as autodetect_connect, ScaleReadError
 
 
 @login_required
@@ -127,9 +128,21 @@ def connect_scale_view(request, scale_id):
 
 
 def connect_scale(scale):
-    if scale.mettler_toledo:
+    if scale.connection_mode == 'autodetect':
+        return _connect_scale_autodetect(scale)
+    if scale.mettler_toledo or scale.connection_mode == 'mettler':
         return _connect_scale_mettler(scale)
     return _connect_scale_default(scale)
+
+
+def _connect_scale_autodetect(scale):
+    """Auto-detect connection mode: scans all candidate ports, connects, and reads."""
+    try:
+        result = autodetect_connect()
+        scale.com_port = result.serial_port
+        return True, f"Successfully connected to {scale.name} on {result.serial_port} (auto-detect)."
+    except ScaleReadError as e:
+        return False, f"Could not connect to scale {scale.name}: {str(e)}"
 
 
 def _connect_scale_default(scale):
@@ -336,10 +349,24 @@ def get_weight(request, scale_id):
                     'success': False,
                 })
             
+            # Auto-detect mode: use autodetect_connect directly
+            if scale.connection_mode == 'autodetect':
+                try:
+                    result = autodetect_connect()
+                    return JsonResponse({
+                        'success': True,
+                        'weight': result.mass
+                    })
+                except ScaleReadError as e:
+                    return JsonResponse({
+                        'success': False,
+                        'message': str(e)
+                    })
+
             # Try to read from the scale
             ser = None
             try:
-                if scale.mettler_toledo:
+                if scale.mettler_toledo or scale.connection_mode == 'mettler':
                     # Mettler Toledo mode: configurable serial params + protocol-aware reading
                     try:
                         ser = serial.Serial(
@@ -477,15 +504,36 @@ def get_current_weight_api(request, scale_id):
                 })
         
         # Fallback: direct serial read (original behaviour when satellite is off)
+
+        # Auto-detect mode
+        if scale.connection_mode == 'autodetect':
+            try:
+                result = autodetect_connect()
+                gross_weight = int(result.mass)
+                net_weight = gross_weight - tare_weight
+                return JsonResponse({
+                    'success': True,
+                    'weight': net_weight,
+                    'gross_weight': gross_weight,
+                    'scale_id': str(scale.scale_id) if scale.scale_id else None,
+                    'scale_name': scale.name,
+                    'serial_port': result.serial_port,
+                })
+            except ScaleReadError as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': str(e)
+                })
+
         if not scale.com_port:
             return JsonResponse({
                 'success': False,
                 'message': f'Scale {scale.name} does not have a COM port configured'
             }, status=400)
-        
+
         ser = None
         try:
-            if scale.mettler_toledo:
+            if scale.mettler_toledo or scale.connection_mode == 'mettler':
                 # Mettler Toledo mode: configurable serial params + protocol-aware reading
                 try:
                     ser = serial.Serial(
