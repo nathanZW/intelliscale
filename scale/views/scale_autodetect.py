@@ -20,7 +20,7 @@ from django.conf import settings
 
 @dataclass
 class ScaleReadResult:
-    mass: Decimal
+    mass: int
     raw_payload: str
     serial_port: str
 
@@ -45,12 +45,12 @@ def parse_mass(raw_text):
 
     match = re.search(r'(-?\d+(?:\.\d+)?)', cleaned)
     if match:
-        return Decimal(match.group(1)).quantize(Decimal('0.01'))
+        return int(Decimal(match.group(1)))
 
     legacy_slice = cleaned[5:8].strip()
     if re.fullmatch(r'\d+(?:\.\d+)?', legacy_slice):
         try:
-            return Decimal(legacy_slice).quantize(Decimal('0.01'))
+            return int(Decimal(legacy_slice))
         except InvalidOperation:
             pass
 
@@ -59,7 +59,7 @@ def parse_mass(raw_text):
         if not fragment:
             continue
         try:
-            return Decimal(fragment).quantize(Decimal('0.01'))
+            return int(Decimal(fragment))
         except InvalidOperation:
             continue
 
