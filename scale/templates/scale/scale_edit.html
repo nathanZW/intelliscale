@@ -50,6 +50,18 @@
                 {% endif %}
             </div>
 
+            <!-- Connection Mode -->
+            <div>
+                <label for="{{ form.connection_mode.id_for_label }}" class="block text-sm font-medium text-zinc-700">Connection Mode</label>
+                <div class="mt-1">
+                    {{ form.connection_mode }}
+                </div>
+                <p class="mt-1 text-xs text-zinc-500">Method used for connection: Default, Mettler Toledo, or Auto Detect</p>
+                {% if form.connection_mode.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.connection_mode.errors }}</p>
+                {% endif %}
+            </div>
+
             <!-- Baud Rate -->
             <div>
                 <label for="{{ form.baud_rate.id_for_label }}" class="block text-sm font-medium text-zinc-700">Baud Rate</label>
