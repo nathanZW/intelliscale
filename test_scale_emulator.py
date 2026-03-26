@@ -318,6 +318,18 @@ TEST_SCENARIOS = [
         "expected_weight": -2.0,
         "description": "Negative weights represent tare and should be accepted with status prefix"
     },
+    {
+        "name": "Bare 'ww' Status Prefix (Non-zero Weight)",
+        "chunks": [b"ww00150.5kg\r\n"],
+        "expected_weight": 150.5,
+        "description": "Scale sends bare 'ww' status prefix before weight value."
+    },
+    {
+        "name": "Bare 'ww' Status Prefix (Zero Weight)",
+        "chunks": [b"ww00000.0kg\r\n"],
+        "expected_weight": 0.0,
+        "description": "Scale sends bare 'ww' prefix with zero weight on empty platform."
+    },
 
 
     # ── Packet Length Attacks ─────────────────────────────────────────────────

@@ -99,8 +99,9 @@ def parse_weight_from_bytes(line):
             # we don't extract "5.0" out of a fragmented "3.5.0", while allowing \x00-\x1f noise.
             prefix = part[:numeric_match.start()]
             
-            # Allow common scale prefixes like ST,GS, or US,NT,
-            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix).strip()
+            # Allow common scale prefixes like ST,GS, or US,NT, or bare 1-2 letter codes like ww
+            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix)
+            prefix_stripped = re.sub(r'^[a-zA-Z]{1,2}$', '', prefix_stripped).strip()
             
             if re.search(r'[a-zA-Z0-9.,]', prefix_stripped):
                 continue
@@ -132,8 +133,9 @@ def parse_weight_from_bytes(line):
         if numeric_only:
             prefix = part[:numeric_only.start()]
             
-            # Allow common scale prefixes like ST,GS, or US,NT,
-            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix).strip()
+            # Allow common scale prefixes like ST,GS, or US,NT, or bare 1-2 letter codes like ww
+            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix)
+            prefix_stripped = re.sub(r'^[a-zA-Z]{1,2}$', '', prefix_stripped).strip()
             
             if re.search(r'[a-zA-Z0-9.,]', prefix_stripped):
                 continue
