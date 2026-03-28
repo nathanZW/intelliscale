@@ -8,18 +8,37 @@ from .scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_we
 
 
 class FakeSerial:
-    def __init__(self, initial_buffer=b'', responses=None, read_failures=0, readline_failures=0):
+    def __init__(
+        self,
+        initial_buffer=b'',
+        responses=None,
+        read_failures=0,
+        readline_failures=0,
+        delayed_buffer=b'',
+        delayed_release_after_checks=None,
+    ):
         self.timeout = 1
         self.is_open = True
         self._buffer = bytearray(initial_buffer)
         self._responses = responses or {}
         self._read_failures = read_failures
         self._readline_failures = readline_failures
+        self._delayed_buffer = delayed_buffer
+        self._delayed_release_after_checks = delayed_release_after_checks
+        self._in_waiting_checks = 0
         self.writes = []
         self.reset_input_buffer_called = False
 
     @property
     def in_waiting(self):
+        self._in_waiting_checks += 1
+        if (
+            self._delayed_buffer
+            and self._delayed_release_after_checks is not None
+            and self._in_waiting_checks > self._delayed_release_after_checks
+        ):
+            self._buffer.extend(self._delayed_buffer)
+            self._delayed_buffer = b''
         return len(self._buffer)
 
     def read(self, size):
@@ -89,10 +108,27 @@ class ReadWeightFromSerialTests(SimpleTestCase):
         self.assertEqual(result, b"    21.0 KG G\r\n")
         self.assertIn(b"SI\r\n", ser.writes)
 
+    def test_reads_delayed_cas_stream_without_newline(self):
+        ser = FakeSerial(
+            delayed_buffer=b"= 0004.0= 0004.0",
+            delayed_release_after_checks=2,
+        )
+
+        result = read_weight_from_serial(ser)
+
+        self.assertEqual(result, b"= 0004.0= 0004.0")
+        self.assertFalse(ser.reset_input_buffer_called)
+
 
 class ParseWeightFromBytesTests(SimpleTestCase):
     def test_parses_live_cas_fixed_width_payload_without_newline(self):
         weight, raw = parse_weight_from_bytes(b'= 0004.0')
+
+        self.assertEqual(weight, 4.0)
+        self.assertEqual(raw, '= 0004.0')
+
+    def test_parses_concatenated_cas_packets(self):
+        weight, raw = parse_weight_from_bytes(b'= 0004.0= 0004.0')
 
         self.assertEqual(weight, 4.0)
         self.assertEqual(raw, '= 0004.0')

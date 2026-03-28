@@ -86,6 +86,29 @@ def _safe_reset_input_buffer(ser):
             raise
 
 
+def _read_until_idle(ser, wait_for_first_byte, max_wait=0.3, settle_time=0.05):
+    deadline = time.monotonic() + max_wait
+    last_data_at = None
+    chunks = bytearray()
+
+    while time.monotonic() < deadline:
+        bytes_waiting = _safe_in_waiting(ser)
+
+        if bytes_waiting > 0:
+            chunk = _safe_read(ser, bytes_waiting)
+            if chunk:
+                chunks.extend(chunk)
+                last_data_at = time.monotonic()
+        elif chunks and last_data_at and (time.monotonic() - last_data_at) >= settle_time:
+            break
+        elif not chunks and not wait_for_first_byte:
+            break
+
+        time.sleep(0.02)
+
+    return bytes(chunks)
+
+
 def parse_weight_from_bytes(line):
     """
     Parses weight from raw scale bytes. Handles multiple formats:
@@ -111,11 +134,13 @@ def parse_weight_from_bytes(line):
     except Exception:
         decoded = line.decode(errors='ignore')
 
-    # CAS CI-200A-C4 can emit a fixed-width payload with no terminator, e.g. b'= 0004.0'.
-    cas_fixed_width_match = re.fullmatch(r'=\s*\d+(?:[.,]\d+)?\s*', decoded)
-    if cas_fixed_width_match:
+    # CAS CI-200A-C4 can emit fixed-width packets with no terminator, and they may
+    # arrive as a short burst like b'= 0004.0= 0004.0'.
+    cas_fixed_width_matches = re.findall(r'=\s*\d+(?:[.,]\d+)?', decoded)
+    if cas_fixed_width_matches:
         try:
-            return float(decoded.replace('=', '', 1).strip().replace(',', '.')), decoded.strip()
+            cas_packet = cas_fixed_width_matches[-1].strip()
+            return float(cas_packet.replace('=', '', 1).strip().replace(',', '.')), cas_packet
         except ValueError:
             pass
     
@@ -253,13 +278,11 @@ def read_weight_from_serial(ser):
     ser.timeout = 1
     
     try:
-        initial_bytes_waiting = _safe_in_waiting(ser)
-        if initial_bytes_waiting > 0:
-            buffered_line = _safe_read(ser, initial_bytes_waiting)
-            if buffered_line:
-                weight, _ = parse_weight_from_bytes(buffered_line)
-                if weight is not None:
-                    return buffered_line
+        buffered_line = _read_until_idle(ser, wait_for_first_byte=True, max_wait=0.3, settle_time=0.05)
+        if buffered_line:
+            weight, _ = parse_weight_from_bytes(buffered_line)
+            if weight is not None:
+                return buffered_line
 
         # Clear any stale data that might be sitting in the buffer
         # (e.g. from a previous partial read)
