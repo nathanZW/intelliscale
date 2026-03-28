@@ -1,10 +1,13 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import serial
 from django.test import SimpleTestCase
 
+from . import satellite_service
 from .scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_weight_from_serial
+from .views.scale import _get_satellite_cached_weight
 
 
 class FakeSerial:
@@ -191,3 +194,53 @@ class OpenSerialForScaleTests(SimpleTestCase):
                 'timeout': 3,
             },
         )
+
+
+class SatelliteServiceTests(SimpleTestCase):
+    def tearDown(self):
+        satellite_service.PERSISTENT_SERIAL_READERS.clear()
+
+    def test_reuses_persistent_reader_between_polls(self):
+        scale = SimpleNamespace(
+            pk=1,
+            name='Scale 1',
+            scale_id='SCALE1',
+            com_port='/dev/ttyUSB0',
+            baud_rate=9600,
+            timeout=1,
+            parity='N',
+            stop_bits=1,
+            data_bits=8,
+        )
+        serial_handle = FakeSerial()
+
+        with patch('scale.satellite_service.open_serial_for_scale', return_value=serial_handle) as open_mock, \
+             patch('scale.satellite_service.read_weight_from_serial', return_value=b'= 0004.5'):
+            first = satellite_service._read_weight_from_scale(scale)
+            second = satellite_service._read_weight_from_scale(scale)
+
+        self.assertEqual(first, (4.5, 'kg'))
+        self.assertEqual(second, (4.5, 'kg'))
+        self.assertEqual(open_mock.call_count, 1)
+
+
+class SatelliteCacheViewTests(SimpleTestCase):
+    def test_returns_cached_weight_when_satellite_enabled(self):
+        scale = SimpleNamespace(pk=1, scale_id='SCALE1', name='Scale 1')
+
+        with patch('scale.models.CompanySettings.objects.first', return_value=SimpleNamespace(satellite=True)), \
+             patch('scale.satellite_service.get_cached_weight_by_scale_id', return_value={
+                 'weight': 14.5,
+                 'unit': 'kg',
+                 'timestamp': 1_000_000.0,
+                 'scale_id': 'SCALE1',
+                 'scale_name': 'Scale 1',
+             }), \
+             patch('scale.views.scale.time.time', return_value=1_000_001.25):
+            response = _get_satellite_cached_weight(scale, tare_weight=2.0)
+
+        payload = json.loads(response.content)
+        self.assertTrue(payload['success'])
+        self.assertEqual(payload['gross_weight'], 14.5)
+        self.assertEqual(payload['weight'], 12.5)
+        self.assertEqual(payload['source'], 'satellite_cache')

@@ -18,6 +18,42 @@ import time
 from ..scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_weight_from_serial
 
 
+def _get_satellite_cached_weight(scale, tare_weight=0):
+    from ..models import CompanySettings
+    from ..satellite_service import get_cached_weight_by_scale_id
+
+    settings = CompanySettings.objects.first()
+    if not settings or not settings.satellite:
+        return None
+
+    cache_key = str(scale.scale_id) if scale.scale_id else str(scale.pk)
+    cached = get_cached_weight_by_scale_id(cache_key)
+    if not cached:
+        return JsonResponse({
+            'success': False,
+            'message': (
+                f'No cached weight available for {scale.name}. '
+                'Ensure the satellite service is running (python manage.py run_satellite).'
+            )
+        })
+
+    gross_weight = cached['weight']
+    net_weight = gross_weight - tare_weight
+    response = {
+        'success': True,
+        'weight': net_weight,
+        'gross_weight': gross_weight,
+        'unit': cached.get('unit', 'kg'),
+        'scale_id': cached.get('scale_id'),
+        'scale_name': cached.get('scale_name'),
+        'source': 'satellite_cache',
+        'cache_age_seconds': round(time.time() - cached['timestamp'], 2),
+    }
+    if tare_weight == 0:
+        response['weight'] = gross_weight
+    return JsonResponse(response)
+
+
 @login_required
 @user_passes_test(is_admin)
 def scale_list(request):
@@ -269,6 +305,9 @@ def get_weight(request, scale_id):
     if request.method == 'POST':
         try:
             scale = get_object_or_404(Scale, pk=scale_id)
+            satellite_response = _get_satellite_cached_weight(scale)
+            if satellite_response is not None:
+                return satellite_response
             
             # Check if scale is connected
             if scale.last_connection_status != "connected":
@@ -376,38 +415,16 @@ def get_current_weight_api(request, scale_id):
             }, status=404)
         
         # Get tare weight from active product (if one exists)
-        from ..models import CompanySettings, Product
-        from ..satellite_service import get_cached_weight_by_scale_id
+        from ..models import Product
         
         tare_weight = 0
         active_product = Product.objects.filter(is_active=True).first()
         if active_product and active_product.tare_weight:
             tare_weight = float(active_product.tare_weight)
         
-        # Check if satellite mode is enabled — return cached weight from file
-        settings = CompanySettings.objects.first()
-        
-        if settings and settings.satellite:
-            cached = get_cached_weight_by_scale_id(str(scale_id))
-            if cached:
-                gross_weight = cached['weight']
-                net_weight = gross_weight - tare_weight
-                return JsonResponse({
-                    'success': True,
-                    'weight': net_weight,
-                    'gross_weight': gross_weight,
-                    'unit': cached['unit'],
-                    'scale_id': cached.get('scale_id'),
-                    'scale_name': cached.get('scale_name'),
-                    'source': 'satellite_cache',
-                    'cache_age_seconds': round(time.time() - cached['timestamp'], 2)
-                })
-            else:
-                return JsonResponse({
-                    'success': False,
-                    'message': f'No cached weight available for scale_id: {scale_id}. '
-                               f'Ensure the satellite service is running (python manage.py run_satellite).'
-                })
+        satellite_response = _get_satellite_cached_weight(scale, tare_weight=tare_weight)
+        if satellite_response is not None:
+            return satellite_response
         
         # Fallback: direct serial read (original behaviour when satellite is off)
         if not scale.com_port:

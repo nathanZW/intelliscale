@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Cache file location — sits alongside the Django project
 CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.satellite_cache.json')
+PERSISTENT_SERIAL_READERS = {}
 
 
 def read_cached_weights():
@@ -54,6 +55,67 @@ def _write_cache(data):
         logger.error(f"Could not write satellite cache: {e}")
 
 
+def _scale_reader_key(scale):
+    return scale.pk
+
+
+def _scale_reader_signature(scale):
+    return (
+        scale.com_port,
+        scale.baud_rate or 9600,
+        scale.timeout or 2,
+        scale.parity or 'N',
+        scale.stop_bits or 1,
+        scale.data_bits or 8,
+    )
+
+
+def _close_persistent_reader(scale_key):
+    state = PERSISTENT_SERIAL_READERS.pop(scale_key, None)
+    if not state:
+        return
+
+    ser = state.get('ser')
+    if ser and ser.is_open:
+        try:
+            ser.close()
+        except Exception:
+            pass
+
+
+def _close_stale_readers(active_scale_keys):
+    stale_keys = set(PERSISTENT_SERIAL_READERS) - set(active_scale_keys)
+    for scale_key in stale_keys:
+        _close_persistent_reader(scale_key)
+
+
+def close_all_persistent_readers():
+    for scale_key in list(PERSISTENT_SERIAL_READERS):
+        _close_persistent_reader(scale_key)
+
+
+def _get_or_open_persistent_reader(scale):
+    scale_key = _scale_reader_key(scale)
+    signature = _scale_reader_signature(scale)
+    state = PERSISTENT_SERIAL_READERS.get(scale_key)
+
+    if state and state.get('signature') == signature:
+        ser = state.get('ser')
+        if ser and ser.is_open:
+            return ser
+        _close_persistent_reader(scale_key)
+    elif state:
+        _close_persistent_reader(scale_key)
+
+    ser = open_serial_for_scale(scale, timeout=scale.timeout or 2)
+    PERSISTENT_SERIAL_READERS[scale_key] = {
+        'ser': ser,
+        'signature': signature,
+    }
+    logger.info(f"Opened persistent serial reader for scale {scale.name} on {scale.com_port}")
+    return ser
+
+
 def _read_weight_from_scale(scale):
     """Read weight from a single scale via serial.
     
@@ -63,9 +125,9 @@ def _read_weight_from_scale(scale):
     Returns:
         (weight: float, unit: str) or (None, None) on failure
     """
-    ser = None
     try:
-        ser = open_serial_for_scale(scale, timeout=scale.timeout or 2)
+        scale_key = _scale_reader_key(scale)
+        ser = _get_or_open_persistent_reader(scale)
 
         if ser.is_open:
             # Use shared multi-strategy reader (raw → MT-SICS → CR/LF)
@@ -86,11 +148,14 @@ def _read_weight_from_scale(scale):
 
         return None, None
 
-    except serial.SerialException:
+    except serial.SerialException as exc:
+        logger.warning(f"Persistent reader failed for scale {scale.name}: {exc}")
+        _close_persistent_reader(scale_key)
         return None, None
-    finally:
-        if ser and ser.is_open:
-            ser.close()
+    except Exception as exc:
+        logger.debug(f"Unexpected persistent reader error for scale {scale.name}: {exc}")
+        _close_persistent_reader(scale_key)
+        return None, None
 
 
 def _try_auto_detect_port(scale):
@@ -164,7 +229,8 @@ def poll_all_scales():
     """
     from scale.models import Scale
 
-    active_scales = Scale.objects.filter(is_active=True)
+    active_scales = list(Scale.objects.filter(is_active=True))
+    active_scale_keys = [scale.pk for scale in active_scales]
 
     cached = read_cached_weights()
 
@@ -173,6 +239,7 @@ def poll_all_scales():
             # Auto-detect port if not set
             if not scale.com_port:
                 if not _try_auto_detect_port(scale):
+                    _close_persistent_reader(scale.pk)
                     # No port found this cycle — skip silently
                     continue
             
@@ -189,6 +256,7 @@ def poll_all_scales():
         except Exception as e:
             logger.debug(f"Failed to read weight from scale {scale.name}: {e}")
 
+    _close_stale_readers(active_scale_keys)
     _write_cache(cached)
 
 
@@ -200,10 +268,13 @@ def run_satellite_loop(poll_interval=1.0):
     """
     logger.info(f"Satellite service started. Polling every {poll_interval}s. Cache file: {CACHE_FILE}")
     
-    while True:
-        try:
-            poll_all_scales()
-        except Exception as e:
-            logger.error(f"Error in satellite poll loop: {e}")
-        
-        time.sleep(poll_interval)
+    try:
+        while True:
+            try:
+                poll_all_scales()
+            except Exception as e:
+                logger.error(f"Error in satellite poll loop: {e}")
+            
+            time.sleep(poll_interval)
+    finally:
+        close_all_persistent_readers()
