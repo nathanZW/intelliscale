@@ -758,8 +758,8 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                                 pass
                                 
                         if is_simple_request:
-                            base_url = f"{company_settings.api_url}/receiving/scaleserver/hac_scale/{float(net_weight):.2f}/{barcode}"
-                            logger.info('Sending simple hac_scale request to: %s', base_url)
+                            base_url = f"{company_settings.api_url}/receiving/scaleserver/manual_scale/{float(net_weight):.2f}/{barcode}"
+                            logger.info('Sending simple manual_scale request to: %s', base_url)
                         else:
                             grower_number = custom_data.get('grower_number', '') if custom_data else ''
                             if not grower_number:

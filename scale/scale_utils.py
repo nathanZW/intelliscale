@@ -2,210 +2,102 @@
 Shared utility functions for scale serial communication.
 Used by both the satellite service and the Django views.
 """
-import os
 import re
 import time
 import serial
-import random
-import logging
-
-logger = logging.getLogger(__name__)
 
 
-def is_candidate_serial_port(device):
+TRANSIENT_EMPTY_READ_ERROR = 'device reports readiness to read but returned no data'
+
+
+def open_serial_for_scale(scale, port=None, timeout=None, exclusive=None):
     """
-    Return True only for device names that actually look like serial adapters.
-    This avoids false positives like "Bluetooth-Incoming-Port", which happens
-    to contain the substring "com" in "incoming".
+    Open a serial connection using the scale's configured parameters first,
+    then fall back to pyserial defaults if that fails.
     """
-    if not device:
-        return False
+    serial_timeout = timeout if timeout is not None else (scale.timeout or 1)
+    port = port or scale.com_port
 
-    normalized = device.strip().lower()
-    basename = os.path.basename(normalized)
-
-    if re.fullmatch(r'com\d+', basename):
-        return True
-
-    if normalized.startswith('/dev/serial/by-id/') or normalized.startswith('/dev/serial/by-path/'):
-        return True
-
-    candidate_tokens = (
-        'ttyusb',
-        'ttyacm',
-        'ttyama',
-        'usbserial',
-        'usbmodem',
-        'wchusbserial',
-        'slab_usbto',
-        'serial',
-    )
-    return any(token in basename for token in candidate_tokens)
-
-
-def run_with_retry(func, max_retries=3, delay=0.1):
-    """
-    Runs a serial-related function with retries for transient SerialExceptions.
-    Specifically handles the case where the port is ready but returns no data,
-    which often indicates another process grabbed the data.
-    """
-    last_exception = None
-    for attempt in range(max_retries):
-        try:
-            return func()
-        except serial.SerialException as e:
-            last_exception = e
-            error_msg = str(e).lower()
-            # Check for various contention-related error messages
-            if "readiness to read but returned no data" in error_msg or \
-               "multiple access on port" in error_msg or \
-               "device disconnected" in error_msg or \
-               "could not exclusively lock port" in error_msg or \
-               "resource temporarily unavailable" in error_msg or \
-               "device or resource busy" in error_msg:
-                
-                # Jittered delay to allow other processes to finish
-                wait_time = delay * (2 ** attempt) + random.uniform(0, 0.05)
-                logger.warning(f"Serial port contention detected (attempt {attempt+1}/{max_retries}). Retrying in {wait_time:.3f}s...")
-                time.sleep(wait_time)
-                continue
-            else:
-                # Other serial exceptions might be fatal (e.g. permission denied, no such port)
-                raise
-        except Exception:
-            # Re-raise non-serial exceptions immediately
-            raise
-    
-    # If we exhausted retries, raise the last encountered serial exception
-    if last_exception:
-        raise last_exception
-
-
-def open_scale_serial(port, baudrate=9600, timeout=1, exclusive=True, **kwargs):
-    """
-    Safely opens a serial port while explicitly disabling DTR and RTS toggling.
-    This prevents USB-serial adapters (commonly used with CAS CI-200A or Mettler scales)
-    from performing a hardware reset upon connection, which causes Linux drivers to
-    momentarily return EOF (0 bytes) yielding a "readiness but returned no data" error.
-    """
-    ser = serial.Serial()
-    ser.port = port
-    ser.baudrate = baudrate
-    ser.timeout = timeout
-    ser.exclusive = exclusive
-    
-    # Apply any other kwargs like parity, stopbits, bytesize
-    for k, v in kwargs.items():
-        setattr(ser, k, v)
-        
-    # Prevent hardware resets on open by explicitly turning off DTR and RTS
-    ser.dtr = False
-    ser.rts = False
-    
-    ser.open()
-    
-    # Tiny stabilization delay so the USB driver settles before the first read/tcflush
-    time.sleep(0.05)
-    
-    return ser
-
-
-def _parse_legacy_fixed_width_mass(raw_text):
-    """
-    Parse older scale-head payloads that place the mass in fixed columns.
-    Keep this narrow so chopped fragments do not become real weights.
-    """
-    if not raw_text:
-        return None
-
-    cleaned = raw_text.replace('=', ' ')
-
-    for start, stop in ((7, 14), (5, 8)):
-        if len(cleaned) < stop:
-            continue
-
-        fragment = cleaned[start:stop].strip().replace(',', '.')
-        if not re.fullmatch(r'-?\d+(?:\.\d+)?', fragment):
-            continue
-
-        try:
-            weight = float(fragment)
-        except ValueError:
-            continue
-
-        if weight > 5000:
-            continue
-
-        return weight
-
-    return None
-
-
-def _parse_repeated_delimited_mass(raw_text):
-    """
-    Parse heads that repeat the same bare numeric value separated by "=".
-    Example: "= 0014.0= 0014.0= 0014.0"
-
-    We keep this strict to avoid turning chopped fragments into weights:
-    there must be at least two numeric tokens, they must all match, and the
-    non-numeric separators may only be spaces or "=" characters.
-    """
-    if not raw_text:
-        return None
-
-    cleaned = raw_text.strip()
-    if not cleaned or re.search(r'[a-zA-Z]', cleaned):
-        return None
-
-    numbers = re.findall(r'[-+]?\d+(?:\.\d+)?', cleaned.replace(',', '.'))
-    if len(numbers) < 2:
-        return None
-
-    first = numbers[0].lstrip('+')
-    if any(number.lstrip('+') != first for number in numbers[1:]):
-        return None
-
-    separators = re.sub(r'[-+]?\d+(?:\.\d+)?', '', cleaned.replace(',', '.'))
-    if re.search(r'[^=\s]', separators):
-        return None
+    configured_kwargs = {
+        'port': port,
+        'baudrate': scale.baud_rate or 9600,
+        'timeout': serial_timeout,
+        'parity': scale.parity or 'N',
+        'stopbits': scale.stop_bits or 1,
+        'bytesize': scale.data_bits or 8,
+    }
+    if exclusive is not None:
+        configured_kwargs['exclusive'] = exclusive
 
     try:
-        weight = float(first)
-    except ValueError:
-        return None
+        return serial.Serial(**configured_kwargs)
+    except (serial.SerialException, ValueError):
+        fallback_kwargs = {
+            'port': port,
+            'timeout': serial_timeout,
+        }
+        if exclusive is not None:
+            fallback_kwargs['exclusive'] = exclusive
+        return serial.Serial(**fallback_kwargs)
 
-    if weight > 5000:
-        return None
 
-    return weight
+def _is_transient_empty_read_error(exc):
+    return TRANSIENT_EMPTY_READ_ERROR in str(exc)
 
 
-def _looks_like_complete_unterminated_packet(raw_part):
+def _safe_in_waiting(ser):
+    try:
+        return ser.in_waiting
+    except serial.SerialException as exc:
+        if _is_transient_empty_read_error(exc):
+            return 0
+        raise
+
+
+def _safe_read(ser, size):
+    try:
+        return ser.read(size)
+    except serial.SerialException as exc:
+        if _is_transient_empty_read_error(exc):
+            return b''
+        raise
+
+
+def _read_until_idle(ser, wait_for_first_byte, settle_time=0.05, max_wait=1.0):
     """
-    Decide whether a packet without CR/LF still looks complete enough to parse.
-    This supports fixed-width and unit-tagged scale heads without accepting
-    short ghost fragments.
+    Wait until the serial buffer stops growing, then read the accumulated bytes.
     """
-    if not raw_part:
-        return False
+    deadline = time.monotonic() + max_wait
+    current_count = _safe_in_waiting(ser)
 
-    if _parse_legacy_fixed_width_mass(raw_part) is not None:
-        return True
+    if wait_for_first_byte:
+        while current_count == 0:
+            if time.monotonic() >= deadline:
+                return b''
+            time.sleep(0.01)
+            current_count = _safe_in_waiting(ser)
+    elif current_count == 0:
+        return b''
 
-    if _parse_repeated_delimited_mass(raw_part) is not None:
-        return True
+    prev_count = current_count
+    last_change = time.monotonic()
 
-    stripped = raw_part.strip()
-    if not stripped:
-        return False
+    while True:
+        time.sleep(0.02)
+        now = time.monotonic()
+        current_count = _safe_in_waiting(ser)
 
-    if re.search(r'(kg|g|lbs|lb|pd)\b', stripped, re.IGNORECASE):
-        upper = stripped.upper()
-        if upper.endswith('KG G') or upper.endswith('KG N'):
-            return len(raw_part) >= 12
-        return len(raw_part) >= 8
+        if current_count != prev_count:
+            prev_count = current_count
+            last_change = now
+        elif (now - last_change) >= settle_time or now >= deadline:
+            break
 
-    return False
+    final_count = _safe_in_waiting(ser)
+    if final_count <= 0:
+        return b''
+
+    return _safe_read(ser, final_count)
 
 
 def parse_weight_from_bytes(line):
@@ -227,6 +119,23 @@ def parse_weight_from_bytes(line):
     """
     if not line:
         return None, ''
+
+    # --- Format 0: CAS fixed-width payload with no terminator ---
+    # Observed live output from a CI-200A-C4 over USB:
+    #   b'= 0004.0'
+    # This format is a complete packet even though it does not end in CR/LF.
+    try:
+        decoded = line.decode('utf-8', errors='ignore')
+    except Exception:
+        decoded = line.decode(errors='ignore')
+
+    cas_fixed_width_match = re.fullmatch(r'[=+-]?\s*\d+(?:[.,]\d+)?\s*', decoded)
+    if cas_fixed_width_match and 6 <= len(line) <= 10:
+        numeric_text = re.sub(r'^[= ]+', '', decoded).strip()
+        try:
+            return float(numeric_text.replace(',', '.')), decoded.strip()
+        except ValueError:
+            pass
     
     # --- Format 1: STX-framed (0x02 ... 0x0D) ---
     if b'\x02' in line:
@@ -258,11 +167,6 @@ def parse_weight_from_bytes(line):
                     pass
     
     # --- Decode for remaining parsers ---
-    try:
-        decoded = line.decode('utf-8', errors='ignore')
-    except Exception:
-        decoded = line.decode(errors='ignore')
-        
     # Split by common terminators to isolate individual readings
     # We replace \r with \n, then split by \n
     parts = decoded.replace('\r', '\n').split('\n')
@@ -273,14 +177,13 @@ def parse_weight_from_bytes(line):
         if len(parts) > 1:
             parts.pop()
         else:
-            # Some scale heads emit fixed-width packets without CR/LF. Only keep
-            # those when the payload looks complete enough to trust.
-            if b'\x02' not in line and not _looks_like_complete_unterminated_packet(parts[0]):
+            # It's a single fragment and it doesn't end in newline. 
+            # Unless it's STX-framed, this is almost certainly an incomplete packet.
+            if b'\x02' not in line:
                 return None, decoded.strip()
         
     # Iterate forwards to grab the first valid parse we can find
     for part in parts:
-        raw_part = part
         # Before stripping, a valid scale packet almost always has leading padding spaces
         # (e.g. "   39.5 KG G"). A fragment chopped by USB buffer dropping (like "5 KG G") 
         # usually lacks them unless the buffer chopped right inside the padding.
@@ -289,13 +192,8 @@ def parse_weight_from_bytes(line):
         part = part.strip()
         if not part:
             continue
-
-        # --- Format 2: Repeated bare numeric packets (e.g. "= 0014.0= 0014.0") ---
-        repeated_weight = _parse_repeated_delimited_mass(raw_part)
-        if repeated_weight is not None:
-            return repeated_weight, part
             
-        # --- Format 3: Unit-suffixed (e.g. "+ 1.23 kg" or "  39.5 KG G") ---
+        # --- Format 2: Unit-suffixed (e.g. "+ 1.23 kg" or "  39.5 KG G") ---
         # A valid packet from this scale is typically ~11+ characters long.
         # A fragment like "5 KG G" is only 6 characters.
         # We use a strict match. It must have boundaries so it doesn't just
@@ -307,8 +205,9 @@ def parse_weight_from_bytes(line):
             # we don't extract "5.0" out of a fragmented "3.5.0", while allowing \x00-\x1f noise.
             prefix = part[:numeric_match.start()]
             
-            # Allow common scale prefixes like ST,GS, or US,NT,
-            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix).strip()
+            # Allow common scale prefixes like ST,GS, or US,NT, or bare 1-2 letter codes like ww
+            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix)
+            prefix_stripped = re.sub(r'^[a-zA-Z]{1,2}$', '', prefix_stripped).strip()
             
             if re.search(r'[a-zA-Z0-9.,]', prefix_stripped):
                 continue
@@ -334,14 +233,15 @@ def parse_weight_from_bytes(line):
             except ValueError:
                 pass
         
-        # --- Format 4: Simple numeric fallback ---
+        # --- Format 3: Simple numeric fallback ---
         # Only parse if the part is PURELY numeric, preventing ".5 KG G" from becoming "5.0".
         numeric_only = re.search(r'([-+]?\d+(?:[.,]\d+)?)\s*$', part)
         if numeric_only:
             prefix = part[:numeric_only.start()]
             
-            # Allow common scale prefixes like ST,GS, or US,NT,
-            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix).strip()
+            # Allow common scale prefixes like ST,GS, or US,NT, or bare 1-2 letter codes like ww
+            prefix_stripped = re.sub(r'^[a-zA-Z]{2}[, ][a-zA-Z]{2}[, ]', '', prefix)
+            prefix_stripped = re.sub(r'^[a-zA-Z]{1,2}$', '', prefix_stripped).strip()
             
             if re.search(r'[a-zA-Z0-9.,]', prefix_stripped):
                 continue
@@ -353,11 +253,6 @@ def parse_weight_from_bytes(line):
                 return weight, part
             except ValueError:
                 pass
-
-        # --- Format 5: Legacy fixed-width payloads ---
-        legacy_weight = _parse_legacy_fixed_width_mass(raw_part)
-        if legacy_weight is not None:
-            return legacy_weight, part
     
     return None, decoded.strip()
 
@@ -365,54 +260,34 @@ def parse_weight_from_bytes(line):
 def read_weight_from_serial(ser):
     """
     Robustly reads weight data from the serial port.
-    
-    Since scales can be streaming continuously or waiting for a prompt,
-    we try reading a line first. If that fails (timeout), we send a prompt
-    and try again.
+
+    Supports continuously streaming scales, prompt-driven scales, and
+    CAS CI-200 request/command modes.
     """
     original_timeout = ser.timeout
-    # Use a 1 second timeout. If a scale is streaming it will hit a newline
-    # immediately. If it's prompted, it will reply within 1s.
     ser.timeout = 1
-    
-    try:
-        # Clear any stale data that might be sitting in the buffer
-        # (e.g. from a previous partial read)
-        ser.reset_input_buffer()
-        
-        # Guard against the Linux tcflush driver bug where the next read returns 0 instantly
-        time.sleep(0.02)
 
-        # 1. Some scale heads emit fixed-width payloads without a line terminator.
-        # A short raw read catches those before readline() discards the bytes.
-        raw_chunk = ser.read(32)
-        if raw_chunk:
-            parsed_weight, _ = parse_weight_from_bytes(raw_chunk)
-            if parsed_weight is not None or b'\n' in raw_chunk or b'\r' in raw_chunk:
-                return raw_chunk
-        
-        # 2. Try reading a clean line (Continuous Output Mode or generic streaming)
-        line = ser.readline()
-        if line and (b'\n' in line or b'\r' in line):
-            return line
-            
-        # 3. If nothing streamed, try MT-SICS "Send Immediate" command
-        ser.write(b"SI\r\n")
-        line = ser.readline()
+    try:
+        # If the device is already streaming, keep the buffered packet instead of
+        # discarding it. Some indicators begin transmitting immediately on open.
+        line = _read_until_idle(ser, wait_for_first_byte=False, settle_time=0.05, max_wait=0.2)
         if line:
             return line
- 
-        # 4. Fallback to standard CR/LF trigger
-        ser.write(b"\r\n")
-        line = ser.readline()
-        if line:
-            return line
-            
-        # 5. Last resort: just read whatever is there (STX-framed formats sometimes lack \n)
-        if ser.in_waiting > 0:
-            return ser.read(ser.in_waiting)
+
+        prompt_attempts = (
+            b"SI\r\n",      # MT-SICS immediate weight
+            b"\r\n",        # generic CR/LF wakeup
+            b"D00KW\r\n",   # CAS CI-200 command mode, default device id 00
+            b"\x00WT\r\n",  # CAS/NT command mode, default device id 0x00
+            b"\x00",        # CAS request mode with device id 00
+        )
+
+        for prompt in prompt_attempts:
+            ser.write(prompt)
+            line = _read_until_idle(ser, wait_for_first_byte=True, settle_time=0.05, max_wait=0.35)
+            if line:
+                return line
 
         return b''
     finally:
         ser.timeout = original_timeout
-

@@ -1531,17 +1531,21 @@
         const getWeightBtn = document.getElementById('get-weight-btn');
         let weightPollingInterval;
         let currentLiveWeight = 0;
+        let isWeightRequestInFlight = false;
 
         function getWeightFromScale(callback) {
-            console.log('getWeightFromScale... (TESTING)');
-            // callback(45);
-            // return;
             const scaleId = $('#scale-select').val();
             
             if (!scaleId) {
                 console.log('Please select a scale first');
                 return;
             }
+
+            if (isWeightRequestInFlight) {
+                return;
+            }
+
+            isWeightRequestInFlight = true;
             
             // Send request to get weight
             $.ajax({
@@ -1559,6 +1563,9 @@
                 },
                 error: function(xhr, status, error) {
                     console.log('Error getting weight: ' + error);
+                },
+                complete: function() {
+                    isWeightRequestInFlight = false;
                 }
             });
         }
@@ -1603,6 +1610,7 @@
             if (weightPollingInterval) {
                 clearInterval(weightPollingInterval);
             }
+            isWeightRequestInFlight = false;
             
             // If a scale is selected, start polling
             if ($(this).val()) {
@@ -1615,6 +1623,7 @@
         });
 
         $(window).on('load', function() {
+            isWeightRequestInFlight = false;
             if (processType === 'WeighBridge') {
                 weightPollingInterval = setInterval(updateLiveWeight, 300);
             } else {
@@ -1627,6 +1636,7 @@
             if (weightPollingInterval) {
                 clearInterval(weightPollingInterval);
             }
+            isWeightRequestInFlight = false;
         });
 
         // Manual get weight button still works

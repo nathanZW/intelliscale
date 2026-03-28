@@ -589,11 +589,15 @@
 
         // Initialize tare display immediately
         updateTareDisplay();
+        let isWeightRequestInFlight = false;
 
         // Get Weight Function
         function getWeight() {
             const scaleId = $(scaleSelect).val();
             if (!scaleId) return;
+            if (isWeightRequestInFlight) return;
+
+            isWeightRequestInFlight = true;
 
             $.ajax({
                 url: "{% url 'scale:get_weight' 0 %}".replace('0', scaleId),
@@ -621,6 +625,9 @@
                         const headerNetValue = document.getElementById('header-net-value');
                         if (headerNetValue) headerNetValue.textContent = net.toFixed(2);
                     }
+                },
+                complete: function() {
+                    isWeightRequestInFlight = false;
                 }
             });
         }
