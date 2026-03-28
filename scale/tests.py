@@ -214,14 +214,75 @@ class SatelliteServiceTests(SimpleTestCase):
         )
         serial_handle = FakeSerial()
 
-        with patch('scale.satellite_service.open_serial_for_scale', return_value=serial_handle) as open_mock, \
+        with patch('scale.satellite_service._port_is_available', return_value=True), \
+             patch('scale.satellite_service.open_serial_for_scale', return_value=serial_handle) as open_mock, \
              patch('scale.satellite_service.read_weight_from_serial', return_value=b'= 0004.5'):
             first = satellite_service._read_weight_from_scale(scale)
             second = satellite_service._read_weight_from_scale(scale)
 
-        self.assertEqual(first, (4.5, 'kg'))
-        self.assertEqual(second, (4.5, 'kg'))
+        self.assertEqual(first, (4.5, 'kg', None))
+        self.assertEqual(second, (4.5, 'kg', None))
         self.assertEqual(open_mock.call_count, 1)
+
+    def test_recovers_by_reopening_reader_after_serial_exception(self):
+        scale = SimpleNamespace(
+            pk=1,
+            name='Scale 1',
+            scale_id='SCALE1',
+            com_port='/dev/ttyUSB0',
+            baud_rate=9600,
+            timeout=1,
+            parity='N',
+            stop_bits=1,
+            data_bits=8,
+        )
+        first_handle = FakeSerial()
+        second_handle = FakeSerial()
+
+        with patch('scale.satellite_service._port_is_available', return_value=True), \
+             patch('scale.satellite_service.open_serial_for_scale', side_effect=[first_handle, second_handle]) as open_mock, \
+             patch('scale.satellite_service.read_weight_from_serial', side_effect=[
+                 serial.SerialException('Input/output error'),
+                 b'= 0004.5',
+             ]), \
+             patch('scale.satellite_service.time.sleep'):
+            result = satellite_service._read_weight_from_scale(scale)
+
+        self.assertEqual(result, (4.5, 'kg', None))
+        self.assertEqual(open_mock.call_count, 2)
+
+    def test_marks_cache_entry_as_recovering_on_read_failure(self):
+        scale = SimpleNamespace(
+            pk=1,
+            name='Scale 1',
+            scale_id='SCALE1',
+            com_port='/dev/ttyUSB0',
+            is_active=True,
+        )
+        written_cache = {}
+
+        def capture_cache(data):
+            written_cache.update(data)
+
+        with patch('scale.models.Scale.objects.filter', return_value=[scale]), \
+             patch('scale.satellite_service.read_cached_weights', return_value={
+                 'SCALE1': {
+                     'weight': 14.5,
+                     'timestamp': 1_000_000.0,
+                     'scale_name': 'Scale 1',
+                     'scale_id': 'SCALE1',
+                 }
+             }), \
+             patch('scale.satellite_service._read_weight_from_scale', return_value=(None, None, 'Input/output error')), \
+             patch('scale.satellite_service._write_cache', side_effect=capture_cache), \
+             patch('scale.satellite_service.time.time', return_value=1_000_010.0):
+            satellite_service.poll_all_scales()
+
+        self.assertEqual(written_cache['SCALE1']['weight'], 14.5)
+        self.assertEqual(written_cache['SCALE1']['timestamp'], 1_000_000.0)
+        self.assertEqual(written_cache['SCALE1']['status'], 'recovering')
+        self.assertEqual(written_cache['SCALE1']['last_attempt'], 1_000_010.0)
+        self.assertEqual(written_cache['SCALE1']['last_error'], 'Input/output error')
 
 
 class SatelliteCacheViewTests(SimpleTestCase):
@@ -244,3 +305,21 @@ class SatelliteCacheViewTests(SimpleTestCase):
         self.assertEqual(payload['gross_weight'], 14.5)
         self.assertEqual(payload['weight'], 12.5)
         self.assertEqual(payload['source'], 'satellite_cache')
+
+    def test_returns_recovering_status_when_cache_has_no_weight_yet(self):
+        scale = SimpleNamespace(pk=1, scale_id='SCALE1', name='Scale 1')
+
+        with patch('scale.models.CompanySettings.objects.first', return_value=SimpleNamespace(satellite=True)), \
+             patch('scale.satellite_service.get_cached_weight_by_scale_id', return_value={
+                 'status': 'recovering',
+                 'last_attempt': 1_000_001.0,
+                 'last_error': 'Input/output error',
+                 'scale_id': 'SCALE1',
+                 'scale_name': 'Scale 1',
+             }):
+            response = _get_satellite_cached_weight(scale)
+
+        payload = json.loads(response.content)
+        self.assertFalse(payload['success'])
+        self.assertEqual(payload['status'], 'recovering')
+        self.assertEqual(payload['last_error'], 'Input/output error')

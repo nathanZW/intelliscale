@@ -6,6 +6,7 @@ Gunicorn workers read from this cache file — no SQLite contention, which neces
 """
 import json
 import os
+import re
 import time
 import serial
 import serial.tools.list_ports
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Cache file location — sits alongside the Django project
 CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.satellite_cache.json')
 PERSISTENT_SERIAL_READERS = {}
+SERIAL_RECOVERY_DELAY_SECONDS = 0.5
 
 
 def read_cached_weights():
@@ -53,6 +55,42 @@ def _write_cache(data):
         os.replace(tmp_file, CACHE_FILE)  # atomic on POSIX
     except (IOError, OSError) as e:
         logger.error(f"Could not write satellite cache: {e}")
+
+
+def _cache_key_for_scale(scale):
+    return str(scale.scale_id) if scale.scale_id else str(scale.pk)
+
+
+def _touch_cache_entry(cached, scale):
+    cache_key = _cache_key_for_scale(scale)
+    entry = cached.get(cache_key, {})
+    entry['scale_name'] = scale.name
+    entry['scale_id'] = str(scale.scale_id) if scale.scale_id else None
+    cached[cache_key] = entry
+    return entry
+
+
+def _mark_scale_cache_status(cached, scale, status, error=None):
+    entry = _touch_cache_entry(cached, scale)
+    entry['status'] = status
+    entry['last_attempt'] = time.time()
+    if error:
+        entry['last_error'] = error
+    else:
+        entry.pop('last_error', None)
+
+
+def _cache_successful_weight(cached, scale, weight, unit):
+    entry = _touch_cache_entry(cached, scale)
+    entry.update({
+        'weight': weight,
+        'unit': unit or 'kg',
+        'timestamp': time.time(),
+        'status': 'ok',
+        'last_attempt': time.time(),
+    })
+    entry.pop('last_error', None)
+    return entry
 
 
 def _scale_reader_key(scale):
@@ -94,6 +132,10 @@ def close_all_persistent_readers():
         _close_persistent_reader(scale_key)
 
 
+def _port_is_available(port):
+    return bool(port) and os.path.exists(port)
+
+
 def _get_or_open_persistent_reader(scale):
     scale_key = _scale_reader_key(scale)
     signature = _scale_reader_signature(scale)
@@ -123,39 +165,54 @@ def _read_weight_from_scale(scale):
     and the shared read/parse helpers for robust, protocol-aware reading.
     
     Returns:
-        (weight: float, unit: str) or (None, None) on failure
+        (weight: float, unit: str, error: str|None)
     """
-    try:
-        scale_key = _scale_reader_key(scale)
-        ser = _get_or_open_persistent_reader(scale)
+    scale_key = _scale_reader_key(scale)
+    last_error = None
 
-        if ser.is_open:
-            # Use shared multi-strategy reader (raw → MT-SICS → CR/LF)
+    for attempt in range(2):
+        try:
+            if not _port_is_available(scale.com_port):
+                _close_persistent_reader(scale_key)
+                if not _try_auto_detect_port(scale):
+                    return None, None, f'Port unavailable: {scale.com_port}'
+
+            ser = _get_or_open_persistent_reader(scale)
+
+            if not ser.is_open:
+                last_error = 'Serial port is not open'
+                _close_persistent_reader(scale_key)
+                continue
+
             line = read_weight_from_serial(ser)
-            
             if not line:
-                return None, None
+                last_error = 'Scale connected but returned no data'
+                logger.warning(f"{scale.name}: {last_error} (attempt {attempt + 1})")
+                _close_persistent_reader(scale_key)
+            else:
+                weight, raw_str = parse_weight_from_bytes(line)
+                if weight is not None:
+                    unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
+                    unit = unit_match.group(1).lower() if unit_match else 'kg'
+                    return weight, unit, None
 
-            # Use shared format-aware parser
-            weight, raw_str = parse_weight_from_bytes(line)
-            
-            if weight is not None:
-                # Extract unit if present in raw string
-                import re
-                unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
-                unit = unit_match.group(1).lower() if unit_match else 'kg'
-                return weight, unit
+                last_error = f'No numeric weight found in: {raw_str}'
+                logger.warning(f"{scale.name}: {last_error} (attempt {attempt + 1})")
+                _close_persistent_reader(scale_key)
 
-        return None, None
+        except serial.SerialException as exc:
+            last_error = str(exc)
+            logger.warning(f"Persistent reader failed for scale {scale.name}: {exc}")
+            _close_persistent_reader(scale_key)
+        except Exception as exc:
+            last_error = str(exc)
+            logger.debug(f"Unexpected persistent reader error for scale {scale.name}: {exc}")
+            _close_persistent_reader(scale_key)
 
-    except serial.SerialException as exc:
-        logger.warning(f"Persistent reader failed for scale {scale.name}: {exc}")
-        _close_persistent_reader(scale_key)
-        return None, None
-    except Exception as exc:
-        logger.debug(f"Unexpected persistent reader error for scale {scale.name}: {exc}")
-        _close_persistent_reader(scale_key)
-        return None, None
+        if attempt == 0:
+            time.sleep(SERIAL_RECOVERY_DELAY_SECONDS)
+
+    return None, None, last_error
 
 
 def _try_auto_detect_port(scale):
@@ -240,20 +297,17 @@ def poll_all_scales():
             if not scale.com_port:
                 if not _try_auto_detect_port(scale):
                     _close_persistent_reader(scale.pk)
+                    _mark_scale_cache_status(cached, scale, 'no_port', 'No serial port detected')
                     # No port found this cycle — skip silently
                     continue
             
-            weight, unit = _read_weight_from_scale(scale)
+            weight, unit, error = _read_weight_from_scale(scale)
             if weight is not None:
-                scale_id_str = str(scale.scale_id) if scale.scale_id else str(scale.pk)
-                cached[scale_id_str] = {
-                    'weight': weight,
-                    'unit': unit or 'kg',
-                    'timestamp': time.time(),
-                    'scale_name': scale.name,
-                    'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                }
+                _cache_successful_weight(cached, scale, weight, unit)
+            else:
+                _mark_scale_cache_status(cached, scale, 'recovering', error or 'Unknown serial read failure')
         except Exception as e:
+            _mark_scale_cache_status(cached, scale, 'error', str(e))
             logger.debug(f"Failed to read weight from scale {scale.name}: {e}")
 
     _close_stale_readers(active_scale_keys)

@@ -37,6 +37,16 @@ def _get_satellite_cached_weight(scale, tare_weight=0):
             )
         })
 
+    if 'weight' not in cached or 'timestamp' not in cached:
+        return JsonResponse({
+            'success': False,
+            'message': cached.get('last_error') or f'{scale.name} has not produced a valid cached weight yet.',
+            'source': 'satellite_cache',
+            'status': cached.get('status', 'unknown'),
+            'last_attempt': cached.get('last_attempt'),
+            'last_error': cached.get('last_error'),
+        })
+
     gross_weight = cached['weight']
     net_weight = gross_weight - tare_weight
     response = {
@@ -48,6 +58,9 @@ def _get_satellite_cached_weight(scale, tare_weight=0):
         'scale_name': cached.get('scale_name'),
         'source': 'satellite_cache',
         'cache_age_seconds': round(time.time() - cached['timestamp'], 2),
+        'status': cached.get('status', 'ok'),
+        'last_attempt': cached.get('last_attempt', cached['timestamp']),
+        'last_error': cached.get('last_error'),
     }
     if tare_weight == 0:
         response['weight'] = gross_weight
