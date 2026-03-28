@@ -10,7 +10,7 @@ import time
 import serial
 import serial.tools.list_ports
 import logging
-from scale.scale_utils import parse_weight_from_bytes, read_weight_from_serial
+from scale.scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_weight_from_serial
 
 logger = logging.getLogger(__name__)
 
@@ -65,19 +65,7 @@ def _read_weight_from_scale(scale):
     """
     ser = None
     try:
-        # Open with the scale's configured serial parameters
-        try:
-            ser = serial.Serial(
-                port=scale.com_port,
-                baudrate=scale.baud_rate or 9600,
-                timeout=scale.timeout or 2,
-                parity=scale.parity or 'N',
-                stopbits=scale.stop_bits or 1,
-                bytesize=scale.data_bits or 8
-            )
-        except serial.SerialException:
-            # Fallback: open with just port and timeout
-            ser = serial.Serial(scale.com_port, timeout=scale.timeout or 2)
+        ser = open_serial_for_scale(scale, timeout=scale.timeout or 2)
 
         if ser.is_open:
             # Use shared multi-strategy reader (raw → MT-SICS → CR/LF)

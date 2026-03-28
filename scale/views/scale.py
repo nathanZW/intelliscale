@@ -15,7 +15,7 @@ import serial
 import serial.tools.list_ports
 import re
 import time
-from ..scale_utils import parse_weight_from_bytes, read_weight_from_serial
+from ..scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_weight_from_serial
 
 
 @login_required
@@ -134,8 +134,7 @@ def connect_scale(scale):
 
 def _connect_scale_default(scale):
     ser = None
-    baud_rate = 9600  # Standard baud rate
-    timeout = 2       # Connection timeout in seconds
+    timeout = scale.timeout or 2
     
     ports_to_try = []
     if scale.com_port:
@@ -145,7 +144,7 @@ def _connect_scale_default(scale):
     for port in ports_to_try:
         print(f"Attempting to connect to specified port: {port} for scale {scale.name}")
         try:
-            ser = serial.Serial(port, baud_rate, timeout=timeout)
+            ser = open_serial_for_scale(scale, port=port, timeout=timeout)
             if ser.is_open:
                 print(f"Successfully opened port {port}. Trying to read data...")
                 # Try a simple read to confirm responsiveness. Some scales send data on connect or CR.
@@ -181,7 +180,7 @@ def _connect_scale_default(scale):
         if 'TTYUSB' in port_device.upper() or 'COM' in port_device.upper() or 'SERIAL' in port_device.upper():
             print(f"Auto-detect: Trying port {port_device} for scale {scale.name}")
             try:
-                ser = serial.Serial(port_device, baud_rate, timeout=timeout)
+                ser = open_serial_for_scale(scale, port=port_device, timeout=timeout)
                 if ser.is_open:
                     print(f"Successfully opened auto-detected port {port_device}. Trying to read...")
                     ser.write(b"\r\n")
@@ -211,10 +210,7 @@ def _connect_scale_mettler(scale):
     Does NOT attempt to read data — that's deferred to get_weight().
     """
     ser = None
-    baud_rate = scale.baud_rate or 9600
-    parity = scale.parity or 'N'
-    stopbits = scale.stop_bits or 1
-    bytesize = scale.data_bits or 8
+    timeout = scale.timeout or 1
     
     ports_to_try = []
     if scale.com_port:
@@ -224,17 +220,8 @@ def _connect_scale_mettler(scale):
     for port in ports_to_try:
         print(f"[MT] Attempting to connect to specified port: {port} for scale {scale.name}")
         
-        # Try 1: With configured serial parameters
         try:
-            ser = serial.Serial(
-                port=port,
-                baudrate=baud_rate,
-                timeout=1,
-                parity=parity,
-                stopbits=stopbits,
-                bytesize=bytesize,
-                exclusive=True
-            )
+            ser = open_serial_for_scale(scale, port=port, timeout=timeout, exclusive=True)
             if ser.is_open:
                 print(f"[MT] Successfully opened port {port} for scale {scale.name}.")
                 ser.close()
@@ -247,24 +234,6 @@ def _connect_scale_mettler(scale):
             print(f"[MT] General Exception on port {port} for scale {scale.name}: {str(e)}")
             if ser and ser.is_open:
                 ser.close()
-        
-        # Try 2: With pyserial defaults only
-        print(f"[MT] Retrying {port} with pyserial defaults (no explicit serial params)...")
-        try:
-            ser = serial.Serial(port, timeout=1, exclusive=True)
-            if ser.is_open:
-                print(f"[MT] Successfully opened port {port} with defaults for scale {scale.name}.")
-                ser.close()
-                return True, f"Successfully connected to {scale.name} on {port} (using defaults)."
-        except serial.SerialException as e:
-            print(f"[MT] SerialException on port {port} (defaults) for scale {scale.name}: {str(e)}")
-            if ser and ser.is_open:
-                ser.close()
-        except Exception as e:
-            print(f"[MT] General Exception on port {port} (defaults) for scale {scale.name}: {str(e)}")
-            if ser and ser.is_open:
-                ser.close()
-
     # If specified port failed or was not provided, attempt auto-detection
     print(f"[MT] Specified port connection failed or port not set for {scale.name}. Attempting auto-detection.")
     available_comports = serial.tools.list_ports.comports()
@@ -277,18 +246,8 @@ def _connect_scale_mettler(scale):
 
         if 'TTYUSB' in port_device.upper() or 'COM' in port_device.upper() or 'SERIAL' in port_device.upper():
             print(f"[MT] Auto-detect: Trying port {port_device} for scale {scale.name}")
-            
-            # Try with configured params
             try:
-                ser = serial.Serial(
-                    port=port_device,
-                    baudrate=baud_rate,
-                    timeout=1,
-                    parity=parity,
-                    stopbits=stopbits,
-                    bytesize=bytesize,
-                    exclusive=True
-                )
+                ser = open_serial_for_scale(scale, port=port_device, timeout=timeout, exclusive=True)
                 if ser.is_open:
                     print(f"[MT] Auto-detect: Successfully opened port {port_device} for scale {scale.name}.")
                     ser.close()
@@ -302,25 +261,6 @@ def _connect_scale_mettler(scale):
                 print(f"[MT] Auto-detect: General Exception on {port_device} for {scale.name}: {str(e)}")
                 if ser and ser.is_open:
                     ser.close()
-            
-            # Try with pyserial defaults
-            print(f"[MT] Auto-detect: Retrying {port_device} with pyserial defaults...")
-            try:
-                ser = serial.Serial(port_device, timeout=1, exclusive=True)
-                if ser.is_open:
-                    print(f"[MT] Auto-detect: Opened {port_device} with defaults for scale {scale.name}.")
-                    ser.close()
-                    scale.com_port = port_device
-                    return True, f"Successfully connected to {scale.name} on {port_device} (auto-detected, defaults)."
-            except serial.SerialException as e:
-                print(f"[MT] Auto-detect: SerialException on {port_device} (defaults): {str(e)}")
-                if ser and ser.is_open:
-                    ser.close()
-            except Exception as e:
-                print(f"[MT] Auto-detect: General Exception on {port_device} (defaults): {str(e)}")
-                if ser and ser.is_open:
-                    ser.close()
-                    
     return False, f"Could not connect to scale {scale.name}. No suitable COM port found or scale not responsive."
 
 
@@ -340,19 +280,7 @@ def get_weight(request, scale_id):
             ser = None
             try:
                 if scale.mettler_toledo:
-                    # Mettler Toledo mode: configurable serial params + protocol-aware reading
-                    try:
-                        ser = serial.Serial(
-                            port=scale.com_port,
-                            baudrate=scale.baud_rate or 9600,
-                            timeout=scale.timeout or 1,
-                            parity=scale.parity or 'N',
-                            stopbits=scale.stop_bits or 1,
-                            bytesize=scale.data_bits or 8
-                        )
-                    except serial.SerialException:
-                        # Fallback: open with just port and timeout
-                        ser = serial.Serial(scale.com_port, timeout=scale.timeout or 1)
+                    ser = open_serial_for_scale(scale, timeout=scale.timeout or 1)
                     
                     if ser.is_open:
                         # Read response using protocol-aware helper
@@ -384,11 +312,16 @@ def get_weight(request, scale_id):
                                 'message': f'No numeric weight found in: {raw_str}'
                             })
                 else:
-                    # Default mode: original behaviour
-                    ser = serial.Serial(scale.com_port, 9600, timeout=2)
+                    ser = open_serial_for_scale(scale, timeout=scale.timeout or 2)
                     if ser.is_open:
                         # Read response using protocol-aware helper
                         line = read_weight_from_serial(ser)
+                        if not line:
+                            print(f"Scale {scale.name} connected but returned no data.")
+                            return JsonResponse({
+                                'success': False,
+                                'message': 'Scale connected but returned no data. Check connection and scale settings.'
+                            })
                         # Parse weight using format-aware parser
                         weight, raw_str = parse_weight_from_bytes(line)
                         
@@ -486,19 +419,7 @@ def get_current_weight_api(request, scale_id):
         ser = None
         try:
             if scale.mettler_toledo:
-                # Mettler Toledo mode: configurable serial params + protocol-aware reading
-                try:
-                    ser = serial.Serial(
-                        port=scale.com_port,
-                        baudrate=scale.baud_rate or 9600,
-                        timeout=scale.timeout or 1,
-                        parity=scale.parity or 'N',
-                        stopbits=scale.stop_bits or 1,
-                        bytesize=scale.data_bits or 8
-                    )
-                except serial.SerialException:
-                    # Fallback: open with just port and timeout
-                    ser = serial.Serial(scale.com_port, timeout=scale.timeout or 1)
+                ser = open_serial_for_scale(scale, timeout=scale.timeout or 1)
                 
                 if ser.is_open:
                     # Read response using protocol-aware helper
@@ -528,8 +449,7 @@ def get_current_weight_api(request, scale_id):
                             'message': f'No numeric weight found in: {raw_str}'
                         })
             else:
-                # Default mode: original behaviour
-                ser = serial.Serial(scale.com_port, 9600, timeout=2)
+                ser = open_serial_for_scale(scale, timeout=scale.timeout or 2)
                 if ser.is_open:
                     # Read response using protocol-aware helper
                     line = read_weight_from_serial(ser)
