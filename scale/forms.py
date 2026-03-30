@@ -54,7 +54,7 @@ class ScaleForm(forms.ModelForm):
             'last_connection_status',
             'last_seen',
             'tare_weight',
-            'mettler_toledo',
+            'protocol',
         ]
         widgets = {
             'name': forms.TextInput(attrs={
@@ -103,8 +103,8 @@ class ScaleForm(forms.ModelForm):
             'tare_weight': forms.NumberInput(attrs={
                 'class': 'block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
             }),
-            'mettler_toledo': forms.CheckboxInput(attrs={
-                'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
+            'protocol': forms.Select(attrs={
+                'class': 'block w-full rounded-md border-zinc-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2'
             }),
         }
         

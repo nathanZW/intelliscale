@@ -11,7 +11,12 @@ import time
 import serial
 import serial.tools.list_ports
 import logging
-from scale.scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_weight_from_serial
+from scale.scale_utils import (
+    get_scale_protocol,
+    open_serial_for_scale,
+    parse_weight_from_bytes,
+    read_weight_bytes_for_scale,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +104,7 @@ def _scale_reader_key(scale):
 
 def _scale_reader_signature(scale):
     return (
+        get_scale_protocol(scale),
         scale.com_port,
         scale.baud_rate or 9600,
         scale.timeout or 2,
@@ -184,7 +190,7 @@ def _read_weight_from_scale(scale):
                 _close_persistent_reader(scale_key)
                 continue
 
-            line = read_weight_from_serial(ser)
+            line = read_weight_bytes_for_scale(scale, ser)
             if not line:
                 last_error = 'Scale connected but returned no data'
                 logger.warning(f"{scale.name}: {last_error} (attempt {attempt + 1})")

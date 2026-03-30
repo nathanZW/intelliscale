@@ -6,7 +6,17 @@ import serial
 from django.test import SimpleTestCase
 
 from . import satellite_service
-from .scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_weight_from_serial
+from .cas_scale_probe import CasScaleProbe
+from .scale_utils import (
+    PROTOCOL_CAS_STREAM,
+    PROTOCOL_GENERIC,
+    get_scale_protocol,
+    open_serial_for_scale,
+    parse_weight_from_bytes,
+    read_cas_stream_sample,
+    read_weight_bytes_for_scale,
+    read_weight_from_serial,
+)
 from .views.scale import _get_satellite_cached_weight
 
 
@@ -85,6 +95,9 @@ class FakeSerial:
         self.reset_input_buffer_called = True
         self._buffer.clear()
 
+    def close(self):
+        self.is_open = False
+
 
 class ReadWeightFromSerialTests(SimpleTestCase):
     def test_keeps_existing_buffered_packets(self):
@@ -135,6 +148,12 @@ class ParseWeightFromBytesTests(SimpleTestCase):
 
         self.assertEqual(weight, 4.0)
         self.assertEqual(raw, '= 0004.0')
+
+    def test_parses_signed_zero_cas_packets(self):
+        weight, raw = parse_weight_from_bytes(b'=-0000.0=-0000.0')
+
+        self.assertEqual(weight, 0.0)
+        self.assertEqual(raw, '=-0000.0')
 
     def test_rejects_numeric_fragment_without_cas_prefix(self):
         weight, raw = parse_weight_from_bytes(b'    88')
@@ -196,6 +215,34 @@ class OpenSerialForScaleTests(SimpleTestCase):
         )
 
 
+class ScaleProtocolDispatchTests(SimpleTestCase):
+    def test_uses_protocol_field_when_present(self):
+        scale = SimpleNamespace(protocol=PROTOCOL_CAS_STREAM, mettler_toledo=False)
+
+        self.assertEqual(get_scale_protocol(scale), PROTOCOL_CAS_STREAM)
+
+    def test_falls_back_to_legacy_mettler_checkbox(self):
+        scale = SimpleNamespace(mettler_toledo=True)
+
+        self.assertEqual(get_scale_protocol(scale), 'mettler_toledo')
+
+    def test_generic_reader_remains_default(self):
+        scale = SimpleNamespace(protocol=PROTOCOL_GENERIC)
+        ser = FakeSerial(initial_buffer=b"    12.5 KG G\r\n")
+
+        result = read_weight_bytes_for_scale(scale, ser)
+
+        self.assertEqual(result, b"    12.5 KG G\r\n")
+
+    def test_cas_protocol_uses_bounded_stream_reader(self):
+        scale = SimpleNamespace(protocol=PROTOCOL_CAS_STREAM)
+        ser = FakeSerial(initial_buffer=b'= 0000.0= 0000.0')
+
+        result = read_weight_bytes_for_scale(scale, ser)
+
+        self.assertEqual(result, b'= 0000.0= 0000.0')
+
+
 class SatelliteServiceTests(SimpleTestCase):
     def tearDown(self):
         satellite_service.PERSISTENT_SERIAL_READERS.clear()
@@ -216,7 +263,7 @@ class SatelliteServiceTests(SimpleTestCase):
 
         with patch('scale.satellite_service._port_is_available', return_value=True), \
              patch('scale.satellite_service.open_serial_for_scale', return_value=serial_handle) as open_mock, \
-             patch('scale.satellite_service.read_weight_from_serial', return_value=b'= 0004.5'):
+             patch('scale.satellite_service.read_weight_bytes_for_scale', return_value=b'= 0004.5'):
             first = satellite_service._read_weight_from_scale(scale)
             second = satellite_service._read_weight_from_scale(scale)
 
@@ -241,7 +288,7 @@ class SatelliteServiceTests(SimpleTestCase):
 
         with patch('scale.satellite_service._port_is_available', return_value=True), \
              patch('scale.satellite_service.open_serial_for_scale', side_effect=[first_handle, second_handle]) as open_mock, \
-             patch('scale.satellite_service.read_weight_from_serial', side_effect=[
+             patch('scale.satellite_service.read_weight_bytes_for_scale', side_effect=[
                  serial.SerialException('Input/output error'),
                  b'= 0004.5',
              ]), \
@@ -283,6 +330,41 @@ class SatelliteServiceTests(SimpleTestCase):
         self.assertEqual(written_cache['SCALE1']['status'], 'recovering')
         self.assertEqual(written_cache['SCALE1']['last_attempt'], 1_000_010.0)
         self.assertEqual(written_cache['SCALE1']['last_error'], 'Input/output error')
+
+
+class CasScaleProbeTests(SimpleTestCase):
+    def test_read_cas_stream_sample_keeps_zero_weight_packets(self):
+        ser = FakeSerial(initial_buffer=b'= 0000.0= 0000.0')
+
+        result = read_cas_stream_sample(ser, max_wait=0.05, idle_window=0.01)
+
+        weight, raw = parse_weight_from_bytes(result)
+        self.assertEqual(result, b'= 0000.0= 0000.0')
+        self.assertEqual(weight, 0.0)
+        self.assertEqual(raw, '= 0000.0')
+
+    def test_probe_marks_empty_reads_without_writing_prompts(self):
+        scale = SimpleNamespace(
+            pk=1,
+            name='Scale 1',
+            scale_id='0021',
+            com_port='/dev/ttyUSB0',
+            baud_rate=9600,
+            timeout=1,
+            parity='N',
+            stop_bits=1,
+            data_bits=8,
+        )
+        probe = CasScaleProbe(scale, read_timeout=0.02, max_wait=0.02, idle_window=0.01)
+        probe._serial = FakeSerial(initial_buffer=b'')
+
+        with patch('scale.cas_scale_probe.os.path.exists', return_value=True):
+            entry = probe.poll_once(previous_entry={'weight': 0.0, 'timestamp': 1_000_000.0})
+
+        self.assertEqual(entry['status'], 'no_data')
+        self.assertEqual(entry['weight'], 0.0)
+        self.assertEqual(entry['timestamp'], 1_000_000.0)
+        self.assertEqual(probe._serial.writes, [])
 
 
 class SatelliteCacheViewTests(SimpleTestCase):

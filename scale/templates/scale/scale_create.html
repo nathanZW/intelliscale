@@ -160,15 +160,15 @@
                 {% endif %}
             </div>
 
-            <!-- Mettler Toledo -->
+            <!-- Protocol -->
             <div>
-                <div class="flex items-center mt-5">
-                    {{ form.mettler_toledo }}
-                    <label for="{{ form.mettler_toledo.id_for_label }}" class="ml-2 block text-sm font-medium text-zinc-700">Mettler Toledo</label>
+                <label for="{{ form.protocol.id_for_label }}" class="block text-sm font-medium text-zinc-700">Protocol</label>
+                <div class="mt-1">
+                    {{ form.protocol }}
                 </div>
-                <p class="mt-1 text-xs text-zinc-500">Enable scale connection that may help with Mettler Toledo scales</p>
-                {% if form.mettler_toledo.errors %}
-                    <p class="mt-2 text-sm text-red-600">{{ form.mettler_toledo.errors }}</p>
+                <p class="mt-1 text-xs text-zinc-500">Choose the serial strategy for this scale. Use CAS Stream for CAS C1-200A-C4 style continuous packets.</p>
+                {% if form.protocol.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.protocol.errors }}</p>
                 {% endif %}
             </div>
         </div>

@@ -8,6 +8,9 @@ import serial
 
 
 TRANSIENT_EMPTY_READ_ERROR = 'device reports readiness to read but returned no data'
+PROTOCOL_GENERIC = 'generic'
+PROTOCOL_METTLER_TOLEDO = 'mettler_toledo'
+PROTOCOL_CAS_STREAM = 'cas_stream'
 
 
 def open_serial_for_scale(scale, port=None, timeout=None, exclusive=None):
@@ -109,6 +112,70 @@ def _read_until_idle(ser, wait_for_first_byte, max_wait=0.3, settle_time=0.05):
     return bytes(chunks)
 
 
+def get_scale_protocol(scale):
+    protocol = getattr(scale, 'protocol', None)
+    if protocol:
+        return protocol
+    if getattr(scale, 'mettler_toledo', False):
+        return PROTOCOL_METTLER_TOLEDO
+    return PROTOCOL_GENERIC
+
+
+def uses_mettler_protocol(scale):
+    return get_scale_protocol(scale) == PROTOCOL_METTLER_TOLEDO
+
+
+def uses_cas_stream_protocol(scale):
+    return get_scale_protocol(scale) == PROTOCOL_CAS_STREAM
+
+
+def read_cas_stream_sample(
+    ser,
+    max_wait=0.25,
+    idle_window=0.05,
+    read_size=32,
+    max_buffer_bytes=32,
+):
+    """
+    Read a short CAS stream sample without prompt writes or newline assumptions.
+    """
+    original_timeout = ser.timeout
+    ser.timeout = max_wait
+    deadline = time.monotonic() + max_wait
+    last_data_at = None
+    chunks = bytearray()
+
+    try:
+        while time.monotonic() < deadline:
+            bytes_waiting = _safe_in_waiting(ser)
+
+            if bytes_waiting > 0:
+                chunk = _safe_read(ser, min(bytes_waiting, read_size))
+            elif chunks:
+                if last_data_at and (time.monotonic() - last_data_at) >= idle_window:
+                    break
+                time.sleep(0.01)
+                continue
+            else:
+                chunk = _safe_read(ser, read_size)
+
+            if chunk:
+                chunks.extend(chunk)
+                last_data_at = time.monotonic()
+                if len(chunks) >= max_buffer_bytes:
+                    break
+                continue
+
+            if not chunks:
+                break
+
+            time.sleep(0.01)
+
+        return bytes(chunks)
+    finally:
+        ser.timeout = original_timeout
+
+
 def parse_weight_from_bytes(line):
     """
     Parses weight from raw scale bytes. Handles multiple formats:
@@ -136,11 +203,14 @@ def parse_weight_from_bytes(line):
 
     # CAS CI-200A-C4 can emit fixed-width packets with no terminator, and they may
     # arrive as a short burst like b'= 0004.0= 0004.0'.
-    cas_fixed_width_matches = re.findall(r'=\s*\d+(?:[.,]\d+)?', decoded)
+    cas_fixed_width_matches = re.findall(r'=\s*[+-]?\d+(?:[.,]\d+)?', decoded)
     if cas_fixed_width_matches:
         try:
             cas_packet = cas_fixed_width_matches[-1].strip()
-            return float(cas_packet.replace('=', '', 1).strip().replace(',', '.')), cas_packet
+            weight = float(cas_packet.replace('=', '', 1).strip().replace(',', '.'))
+            if weight == 0:
+                weight = 0.0
+            return weight, cas_packet
         except ValueError:
             pass
     
@@ -313,3 +383,9 @@ def read_weight_from_serial(ser):
         return b''
     finally:
         ser.timeout = original_timeout
+
+
+def read_weight_bytes_for_scale(scale, ser):
+    if uses_cas_stream_protocol(scale):
+        return read_cas_stream_sample(ser)
+    return read_weight_from_serial(ser)

@@ -15,7 +15,13 @@ import serial
 import serial.tools.list_ports
 import re
 import time
-from ..scale_utils import open_serial_for_scale, parse_weight_from_bytes, read_weight_from_serial
+from ..scale_utils import (
+    open_serial_for_scale,
+    parse_weight_from_bytes,
+    read_weight_bytes_for_scale,
+    uses_cas_stream_protocol,
+    uses_mettler_protocol,
+)
 
 
 def _get_satellite_cached_weight(scale, tare_weight=0):
@@ -176,8 +182,8 @@ def connect_scale_view(request, scale_id):
 
 
 def connect_scale(scale):
-    if scale.mettler_toledo:
-        return _connect_scale_mettler(scale)
+    if uses_mettler_protocol(scale) or uses_cas_stream_protocol(scale):
+        return _connect_scale_passive(scale)
     return _connect_scale_default(scale)
 
 
@@ -252,10 +258,11 @@ def _connect_scale_default(scale):
     return False, f"Could not connect to scale {scale.name}. No suitable COM port found or scale not responsive."
 
 
-def _connect_scale_mettler(scale):
+def _connect_scale_passive(scale):
     """
-    Mettler Toledo connection mode: uses configurable serial parameters,
-    exclusive port access, and a defaults-fallback strategy.
+    Passive connection mode: uses configurable serial parameters,
+    exclusive port access, and a defaults-fallback strategy without
+    sending any probe bytes to the scale.
     Does NOT attempt to read data — that's deferred to get_weight().
     """
     ser = None
@@ -267,26 +274,26 @@ def _connect_scale_mettler(scale):
 
     # Attempt to connect to the specified port first
     for port in ports_to_try:
-        print(f"[MT] Attempting to connect to specified port: {port} for scale {scale.name}")
+        print(f"[PASSIVE] Attempting to connect to specified port: {port} for scale {scale.name}")
         
         try:
             ser = open_serial_for_scale(scale, port=port, timeout=timeout, exclusive=True)
             if ser.is_open:
-                print(f"[MT] Successfully opened port {port} for scale {scale.name}.")
+                print(f"[PASSIVE] Successfully opened port {port} for scale {scale.name}.")
                 ser.close()
                 return True, f"Successfully connected to {scale.name} on {port}."
         except serial.SerialException as e:
-            print(f"[MT] SerialException on port {port} for scale {scale.name}: {str(e)}")
+            print(f"[PASSIVE] SerialException on port {port} for scale {scale.name}: {str(e)}")
             if ser and ser.is_open:
                 ser.close()
         except Exception as e:
-            print(f"[MT] General Exception on port {port} for scale {scale.name}: {str(e)}")
+            print(f"[PASSIVE] General Exception on port {port} for scale {scale.name}: {str(e)}")
             if ser and ser.is_open:
                 ser.close()
     # If specified port failed or was not provided, attempt auto-detection
-    print(f"[MT] Specified port connection failed or port not set for {scale.name}. Attempting auto-detection.")
+    print(f"[PASSIVE] Specified port connection failed or port not set for {scale.name}. Attempting auto-detection.")
     available_comports = serial.tools.list_ports.comports()
-    print(f"[MT] Available COM ports for auto-detection: {[p.device for p in available_comports]}")
+    print(f"[PASSIVE] Available COM ports for auto-detection: {[p.device for p in available_comports]}")
 
     for comport_info in available_comports:
         port_device = comport_info.device
@@ -294,23 +301,52 @@ def _connect_scale_mettler(scale):
             continue
 
         if 'TTYUSB' in port_device.upper() or 'COM' in port_device.upper() or 'SERIAL' in port_device.upper():
-            print(f"[MT] Auto-detect: Trying port {port_device} for scale {scale.name}")
+            print(f"[PASSIVE] Auto-detect: Trying port {port_device} for scale {scale.name}")
             try:
                 ser = open_serial_for_scale(scale, port=port_device, timeout=timeout, exclusive=True)
                 if ser.is_open:
-                    print(f"[MT] Auto-detect: Successfully opened port {port_device} for scale {scale.name}.")
+                    print(f"[PASSIVE] Auto-detect: Successfully opened port {port_device} for scale {scale.name}.")
                     ser.close()
                     scale.com_port = port_device
                     return True, f"Successfully connected to {scale.name} on {port_device} (auto-detected)."
             except serial.SerialException as e:
-                print(f"[MT] Auto-detect: SerialException on {port_device} for {scale.name}: {str(e)}")
+                print(f"[PASSIVE] Auto-detect: SerialException on {port_device} for {scale.name}: {str(e)}")
                 if ser and ser.is_open:
                     ser.close()
             except Exception as e:
-                print(f"[MT] Auto-detect: General Exception on {port_device} for {scale.name}: {str(e)}")
+                print(f"[PASSIVE] Auto-detect: General Exception on {port_device} for {scale.name}: {str(e)}")
                 if ser and ser.is_open:
                     ser.close()
     return False, f"Could not connect to scale {scale.name}. No suitable COM port found or scale not responsive."
+
+
+def _serial_timeout_for_scale(scale):
+    if uses_mettler_protocol(scale) or uses_cas_stream_protocol(scale):
+        return scale.timeout or 1
+    return scale.timeout or 2
+
+
+def _read_scale_weight(scale):
+    ser = None
+    try:
+        ser = open_serial_for_scale(scale, timeout=_serial_timeout_for_scale(scale))
+        if not ser.is_open:
+            return None, None, None, 'Scale serial port is not open'
+
+        line = read_weight_bytes_for_scale(scale, ser)
+        if not line:
+            return None, None, None, 'Scale connected but returned no data. Check connection and scale settings.'
+
+        weight, raw_str = parse_weight_from_bytes(line)
+        if weight is None:
+            return None, raw_str, line, f'No numeric weight found in: {raw_str}'
+
+        unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
+        unit = unit_match.group(1).lower() if unit_match else 'kg'
+        return weight, raw_str, line, unit
+    finally:
+        if ser and ser.is_open:
+            ser.close()
 
 
 @login_required
@@ -329,79 +365,31 @@ def get_weight(request, scale_id):
                 })
             
             # Try to read from the scale
-            ser = None
             try:
-                if scale.mettler_toledo:
-                    ser = open_serial_for_scale(scale, timeout=scale.timeout or 1)
-                    
-                    if ser.is_open:
-                        # Read response using protocol-aware helper
-                        line = read_weight_from_serial(ser)
-                        
-                        if not line:
-                            print(f"Scale {scale.name} connected but returned no data.")
-                            return JsonResponse({
-                                'success': False,
-                                'message': 'Scale connected but returned no data. Check connection and scale settings.'
-                            })
+                weight, detail, raw_bytes, result = _read_scale_weight(scale)
+                if weight is None:
+                    if raw_bytes is not None:
+                        raw_preview = repr(raw_bytes[:60]) + ('...' if len(raw_bytes) > 60 else '')
+                        print(f"Scale {scale.name}: weight=None raw={raw_preview}")
+                    else:
+                        print(f"Scale {scale.name}: {result}")
+                    return JsonResponse({
+                        'success': False,
+                        'message': result
+                    })
 
-                        # Parse weight using format-aware parser
-                        weight, raw_str = parse_weight_from_bytes(line)
-                        
-                        # Concise log: show weight + truncated raw bytes
-                        raw_preview = repr(line[:60]) + ('...' if len(line) > 60 else '')
-                        print(f"Scale {scale.name}: weight={weight} raw={raw_preview}")
-
-                        if weight is not None:
-                            return JsonResponse({
-                                'success': True,
-                                'weight': weight
-                            })
-                        else:
-                            print(f"No numeric weight found in '{raw_str}' for scale {scale.name}")
-                            return JsonResponse({
-                                'success': False,
-                                'message': f'No numeric weight found in: {raw_str}'
-                            })
-                else:
-                    ser = open_serial_for_scale(scale, timeout=scale.timeout or 2)
-                    if ser.is_open:
-                        # Read response using protocol-aware helper
-                        line = read_weight_from_serial(ser)
-                        if not line:
-                            print(f"Scale {scale.name} connected but returned no data.")
-                            return JsonResponse({
-                                'success': False,
-                                'message': 'Scale connected but returned no data. Check connection and scale settings.'
-                            })
-                        # Parse weight using format-aware parser
-                        weight, raw_str = parse_weight_from_bytes(line)
-                        
-                        # Concise log: show weight + truncated raw bytes
-                        raw_preview = repr(line[:60]) + ('...' if len(line) > 60 else '')
-                        print(f"Scale {scale.name}: weight={weight} raw={raw_preview}")
-
-                        if weight is not None:
-                            return JsonResponse({
-                                'success': True,
-                                'weight': weight
-                            })
-                        else:
-                            print(f"No numeric weight found in '{raw_str}' for scale {scale.name}")
-                            return JsonResponse({
-                                'success': False,
-                                'message': f'No numeric weight found in: {raw_str}'
-                            })
-                        
+                raw_preview = repr(raw_bytes[:60]) + ('...' if len(raw_bytes) > 60 else '')
+                print(f"Scale {scale.name}: weight={weight} raw={raw_preview}")
+                return JsonResponse({
+                    'success': True,
+                    'weight': weight
+                })
             except serial.SerialException as e:
                 print(f"SerialException for scale {scale.name}: {str(e)}")
                 return JsonResponse({
                     'success': False,
                     'message': f'Error reading from scale: {str(e)}'
                 })
-            finally:
-                if ser and ser.is_open:
-                    ser.close()
                     
         except Exception as e:
             print(f"General exception in get_weight for scale {scale_id}: {str(e)}")
@@ -446,80 +434,28 @@ def get_current_weight_api(request, scale_id):
                 'message': f'Scale {scale.name} does not have a COM port configured'
             }, status=400)
         
-        ser = None
         try:
-            if scale.mettler_toledo:
-                ser = open_serial_for_scale(scale, timeout=scale.timeout or 1)
-                
-                if ser.is_open:
-                    # Read response using protocol-aware helper
-                    line = read_weight_from_serial(ser)
-                    
-                    if not line:
-                         return JsonResponse({
-                            'success': False,
-                            'message': 'Scale connected but returned no data.'
-                        })
+            weight, detail, raw_bytes, result = _read_scale_weight(scale)
+            if weight is None:
+                return JsonResponse({
+                    'success': False,
+                    'message': result
+                })
 
-                    # Parse weight using format-aware parser
-                    weight, raw_str = parse_weight_from_bytes(line)
-                    
-                    if weight is not None:
-                        net_weight = weight - tare_weight
-                        return JsonResponse({
-                            'success': True,
-                            'weight': net_weight,
-                            'gross_weight': weight,
-                            'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                            'scale_name': scale.name
-                        })
-                    else:
-                        return JsonResponse({
-                            'success': False,
-                            'message': f'No numeric weight found in: {raw_str}'
-                        })
-            else:
-                ser = open_serial_for_scale(scale, timeout=scale.timeout or 2)
-                if ser.is_open:
-                    # Read response using protocol-aware helper
-                    line = read_weight_from_serial(ser)
-                    if not line:
-                         return JsonResponse({
-                            'success': False,
-                            'message': 'Scale connected but returned no data.'
-                        })
-
-                    # Parse weight using format-aware parser
-                    weight, raw_str = parse_weight_from_bytes(line)
-                    
-                    if weight is not None:
-                        net_weight = weight - tare_weight
-                        # Extract unit if present
-                        unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
-                        unit = unit_match.group(1).lower() if unit_match else 'kg'
-                        
-                        return JsonResponse({
-                            'success': True,
-                            'weight': net_weight,
-                            'gross_weight': weight,
-                            'unit': unit,
-                            'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                            'scale_name': scale.name
-                        })
-                    else:
-                        return JsonResponse({
-                            'success': False,
-                            'message': f'No numeric weight found in: {raw_str}'
-                        })
-                    
+            net_weight = weight - tare_weight
+            return JsonResponse({
+                'success': True,
+                'weight': net_weight,
+                'gross_weight': weight,
+                'unit': result,
+                'scale_id': str(scale.scale_id) if scale.scale_id else None,
+                'scale_name': scale.name
+            })
         except serial.SerialException as e:
             return JsonResponse({
                 'success': False,
                 'message': f'Error reading from scale: {str(e)}'
             })
-        finally:
-            if ser and ser.is_open:
-                ser.close()
                 
     except Exception as e:
         return JsonResponse({
