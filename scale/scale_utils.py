@@ -4,6 +4,176 @@ Used by both the satellite service and the Django views.
 """
 import re
 import time
+import serial
+
+
+TRANSIENT_EMPTY_READ_ERROR = 'device reports readiness to read but returned no data'
+PROTOCOL_GENERIC = 'generic'
+PROTOCOL_METTLER_TOLEDO = 'mettler_toledo'
+PROTOCOL_CAS_STREAM = 'cas_stream'
+
+
+def open_serial_for_scale(scale, port=None, timeout=None, exclusive=None):
+    """
+    Open a serial connection using the scale's configured parameters first,
+    then fall back to pyserial defaults if that fails.
+    """
+    serial_timeout = timeout if timeout is not None else (scale.timeout or 1)
+    port = port or scale.com_port
+
+    configured_kwargs = {
+        'port': port,
+        'baudrate': scale.baud_rate or 9600,
+        'timeout': serial_timeout,
+        'parity': scale.parity or 'N',
+        'stopbits': scale.stop_bits or 1,
+        'bytesize': scale.data_bits or 8,
+    }
+    if exclusive is not None:
+        configured_kwargs['exclusive'] = exclusive
+
+    try:
+        return serial.Serial(**configured_kwargs)
+    except (serial.SerialException, ValueError):
+        fallback_kwargs = {
+            'port': port,
+            'timeout': serial_timeout,
+        }
+        if exclusive is not None:
+            fallback_kwargs['exclusive'] = exclusive
+        return serial.Serial(**fallback_kwargs)
+
+
+def _is_transient_empty_read_error(exc):
+    return TRANSIENT_EMPTY_READ_ERROR in str(exc)
+
+
+def _safe_in_waiting(ser):
+    try:
+        return ser.in_waiting
+    except serial.SerialException as exc:
+        if _is_transient_empty_read_error(exc):
+            return 0
+        raise
+
+
+def _safe_read(ser, size, attempts=2):
+    for attempt in range(attempts + 1):
+        try:
+            return ser.read(size)
+        except serial.SerialException as exc:
+            if _is_transient_empty_read_error(exc) and attempt < attempts:
+                time.sleep(0.02)
+                continue
+            raise
+    return b''
+
+
+def _safe_readline(ser, attempts=2):
+    for attempt in range(attempts + 1):
+        try:
+            return ser.readline()
+        except serial.SerialException as exc:
+            if _is_transient_empty_read_error(exc) and attempt < attempts:
+                time.sleep(0.02)
+                continue
+            raise
+    return b''
+
+
+def _safe_reset_input_buffer(ser):
+    try:
+        ser.reset_input_buffer()
+    except serial.SerialException as exc:
+        if not _is_transient_empty_read_error(exc):
+            raise
+
+
+def _read_until_idle(ser, wait_for_first_byte, max_wait=0.3, settle_time=0.05):
+    deadline = time.monotonic() + max_wait
+    last_data_at = None
+    chunks = bytearray()
+
+    while time.monotonic() < deadline:
+        bytes_waiting = _safe_in_waiting(ser)
+
+        if bytes_waiting > 0:
+            chunk = _safe_read(ser, bytes_waiting)
+            if chunk:
+                chunks.extend(chunk)
+                last_data_at = time.monotonic()
+        elif chunks and last_data_at and (time.monotonic() - last_data_at) >= settle_time:
+            break
+        elif not chunks and not wait_for_first_byte:
+            break
+
+        time.sleep(0.02)
+
+    return bytes(chunks)
+
+
+def get_scale_protocol(scale):
+    protocol = getattr(scale, 'protocol', None)
+    if protocol:
+        return protocol
+    if getattr(scale, 'mettler_toledo', False):
+        return PROTOCOL_METTLER_TOLEDO
+    return PROTOCOL_GENERIC
+
+
+def uses_mettler_protocol(scale):
+    return get_scale_protocol(scale) == PROTOCOL_METTLER_TOLEDO
+
+
+def uses_cas_stream_protocol(scale):
+    return get_scale_protocol(scale) == PROTOCOL_CAS_STREAM
+
+
+def read_cas_stream_sample(
+    ser,
+    max_wait=0.25,
+    idle_window=0.05,
+    read_size=32,
+    max_buffer_bytes=32,
+):
+    """
+    Read a short CAS stream sample without prompt writes or newline assumptions.
+    """
+    original_timeout = ser.timeout
+    ser.timeout = max_wait
+    deadline = time.monotonic() + max_wait
+    last_data_at = None
+    chunks = bytearray()
+
+    try:
+        while time.monotonic() < deadline:
+            bytes_waiting = _safe_in_waiting(ser)
+
+            if bytes_waiting > 0:
+                chunk = _safe_read(ser, min(bytes_waiting, read_size))
+            elif chunks:
+                if last_data_at and (time.monotonic() - last_data_at) >= idle_window:
+                    break
+                time.sleep(0.01)
+                continue
+            else:
+                chunk = _safe_read(ser, read_size)
+
+            if chunk:
+                chunks.extend(chunk)
+                last_data_at = time.monotonic()
+                if len(chunks) >= max_buffer_bytes:
+                    break
+                continue
+
+            if not chunks:
+                break
+
+            time.sleep(0.01)
+
+        return bytes(chunks)
+    finally:
+        ser.timeout = original_timeout
 
 
 def parse_weight_from_bytes(line):
@@ -25,6 +195,24 @@ def parse_weight_from_bytes(line):
     """
     if not line:
         return None, ''
+
+    try:
+        decoded = line.decode('utf-8', errors='ignore')
+    except Exception:
+        decoded = line.decode(errors='ignore')
+
+    # CAS CI-200A-C4 can emit fixed-width packets with no terminator, and they may
+    # arrive as a short burst like b'= 0004.0= 0004.0'.
+    cas_fixed_width_matches = re.findall(r'=\s*[+-]?\d+(?:[.,]\d+)?', decoded)
+    if cas_fixed_width_matches:
+        try:
+            cas_packet = cas_fixed_width_matches[-1].strip()
+            weight = float(cas_packet.replace('=', '', 1).strip().replace(',', '.'))
+            if weight == 0:
+                weight = 0.0
+            return weight, cas_packet
+        except ValueError:
+            pass
     
     # --- Format 1: STX-framed (0x02 ... 0x0D) ---
     if b'\x02' in line:
@@ -56,11 +244,6 @@ def parse_weight_from_bytes(line):
                     pass
     
     # --- Decode for remaining parsers ---
-    try:
-        decoded = line.decode('utf-8', errors='ignore')
-    except Exception:
-        decoded = line.decode(errors='ignore')
-        
     # Split by common terminators to isolate individual readings
     # We replace \r with \n, then split by \n
     parts = decoded.replace('\r', '\n').split('\n')
@@ -165,31 +348,44 @@ def read_weight_from_serial(ser):
     ser.timeout = 1
     
     try:
+        buffered_line = _read_until_idle(ser, wait_for_first_byte=True, max_wait=0.3, settle_time=0.05)
+        if buffered_line:
+            weight, _ = parse_weight_from_bytes(buffered_line)
+            if weight is not None:
+                return buffered_line
+
         # Clear any stale data that might be sitting in the buffer
         # (e.g. from a previous partial read)
-        ser.reset_input_buffer()
+        _safe_reset_input_buffer(ser)
         
         # 1. Try reading a clean line (Continuous Output Mode or generic streaming)
-        line = ser.readline()
+        line = _safe_readline(ser)
         if line and (b'\n' in line or b'\r' in line):
             return line
             
         # 2. If nothing streamed, try MT-SICS "Send Immediate" command
         ser.write(b"SI\r\n")
-        line = ser.readline()
+        line = _safe_readline(ser)
         if line:
             return line
 
         # 3. Fallback to standard CR/LF trigger
         ser.write(b"\r\n")
-        line = ser.readline()
+        line = _safe_readline(ser)
         if line:
             return line
             
         # 4. Last resort: just read whatever is there (STX-framed formats sometimes lack \n)
-        if ser.in_waiting > 0:
-            return ser.read(ser.in_waiting)
+        bytes_waiting = _safe_in_waiting(ser)
+        if bytes_waiting > 0:
+            return _safe_read(ser, bytes_waiting)
 
         return b''
     finally:
         ser.timeout = original_timeout
+
+
+def read_weight_bytes_for_scale(scale, ser):
+    if uses_cas_stream_protocol(scale):
+        return read_cas_stream_sample(ser)
+    return read_weight_from_serial(ser)

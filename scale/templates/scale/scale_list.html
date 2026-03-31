@@ -25,6 +25,7 @@
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Name</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Manufacturer</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Model Number</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Protocol</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Capacity (kg)</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Status</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">Last Seen</th>
@@ -37,6 +38,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900">{{ scale.name }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">{{ scale.manufacturer }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">{{ scale.model_number }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">{{ scale.get_protocol_display }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">{{ scale.max_capacity }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if scale.is_active and scale.last_connection_status == 'connected' %}bg-green-100 text-green-800{% elif not scale.is_active %}bg-red-100 text-red-800{% else %}bg-amber-100 text-amber-800{% endif %}">

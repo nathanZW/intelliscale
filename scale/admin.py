@@ -3,8 +3,8 @@ from .models import Scale, WeighingProcess, Product, DeliveryNote, WeighingRecor
 
 
 class ScaleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'manufacturer', 'model_number', 'is_active', 'last_connection_status', 'last_seen')
-    list_filter = ('is_active', 'last_connection_status')
+    list_display = ('name', 'manufacturer', 'model_number', 'protocol', 'is_active', 'last_connection_status', 'last_seen')
+    list_filter = ('protocol', 'is_active', 'last_connection_status')
     search_fields = ('name', 'manufacturer', 'model_number')
     list_editable = ('is_active', 'last_connection_status')
     list_per_page = 20
