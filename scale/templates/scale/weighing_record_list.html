@@ -86,7 +86,7 @@
                     <a href="{% url 'scale:weighing_record_list' %}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 h-10 px-4 py-2">
                         Clear Filters
                     </a>
-                    <button type="submit" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2">
+                    <button type="submit" id="apply-filters-btn" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2">
                         Apply Filters
                     </button>
                 </div>
@@ -449,32 +449,21 @@
             });
         }
         
-        // Auto-submit form when filters change (except for text inputs)
         const filterForm = document.getElementById('filter-form');
-        const selectFilters = filterForm.querySelectorAll('select');
-        const dateFilters = filterForm.querySelectorAll('input[type="date"]');
-        
-        selectFilters.forEach(select => {
-            select.addEventListener('change', function() {
-                filterForm.submit();
-            });
+        const applyFiltersBtn = document.getElementById('apply-filters-btn');
+        let applyFiltersRequested = false;
+
+        filterForm.addEventListener('submit', function(event) {
+            if (!applyFiltersRequested) {
+                event.preventDefault();
+                return;
+            }
+
+            applyFiltersRequested = false;
         });
-        
-        dateFilters.forEach(date => {
-            date.addEventListener('change', function() {
-                filterForm.submit();
-            });
-        });
-        
-        // Add debounce for barcode filter
-        const barcodeFilter = document.getElementById('barcode-filter');
-        let debounceTimer;
-        
-        barcodeFilter.addEventListener('input', function() {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(function() {
-                filterForm.submit();
-            }, 500); // 500ms delay
+
+        applyFiltersBtn.addEventListener('click', function() {
+            applyFiltersRequested = true;
         });
         
         // --- Bulk Delete Logic ---
