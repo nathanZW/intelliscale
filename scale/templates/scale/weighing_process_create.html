@@ -17,17 +17,6 @@
         </div>
     </div>
 
-    {% if messages %}
-    <div class="mb-6">
-        {% for message in messages %}
-        <div
-            class="bg-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-50 border border-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-200 text-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-600 text-sm rounded-md p-4 mb-4">
-            {{ message }}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
     <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
         <div class="px-6 py-4 border-b border-zinc-200">
             <h2 class="text-lg font-medium text-zinc-900">Weighing Process Configuration</h2>

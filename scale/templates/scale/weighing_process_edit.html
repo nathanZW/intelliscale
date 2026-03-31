@@ -16,17 +16,6 @@
         <h1 class="text-2xl font-semibold text-zinc-900">Edit Process: {{ weighing_process.name }}</h1>
     </div>
 
-    {% if messages %}
-    <div class="mb-6">
-        {% for message in messages %}
-        <div
-            class="bg-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-50 border border-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-200 text-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-600 text-sm rounded-md p-4 mb-4">
-            {{ message }}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
     <div class="bg-white shadow rounded-lg overflow-hidden">
         <form method="post" class="p-6 space-y-6">
             {% csrf_token %}

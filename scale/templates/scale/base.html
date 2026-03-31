@@ -22,6 +22,23 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-zinc-50 min-h-screen">
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex w-full max-w-sm flex-col gap-3 px-4 sm:px-0 pointer-events-none print:hidden">
+        {% if messages %}
+            {% for message in messages %}
+                <div data-toast role="status" aria-live="polite" class="pointer-events-auto flex items-start gap-3 rounded-lg border px-4 py-3 shadow-lg transition-all duration-300 ease-out translate-x-6 opacity-0 {% if message.tags == 'success' %}border-green-200 bg-green-50 text-green-800{% elif message.tags == 'error' %}border-red-200 bg-red-50 text-red-800{% else %}border-blue-200 bg-blue-50 text-blue-800{% endif %}">
+                    <div class="min-w-0 flex-1 text-sm font-medium">
+                        {{ message }}
+                    </div>
+                    <button type="button" class="shrink-0 text-current/70 hover:text-current" aria-label="Dismiss notification" data-toast-close>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 11-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+
     <!-- Modern Header -->
     <header class="bg-white border-b border-zinc-200 sticky top-0 z-30 print:hidden">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -126,16 +143,6 @@
     </header>
 
     <main class="w-11/12 mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {% if messages %}
-            <div class="mb-6 print:hidden">
-                {% for message in messages %}
-                    <div class="bg-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-50 border border-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-200 text-{% if message.tags == 'success' %}green{% elif message.tags == 'error' %}red{% else %}blue{% endif %}-600 text-sm rounded-md p-4 mb-4">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-
         {% block content %}{% endblock %}
     </main>
 
@@ -147,10 +154,32 @@
             const mobileMenuButton = document.getElementById('mobile-menu-button');
             const mobileMenu = document.getElementById('mobile-menu');
             
-            mobileMenuButton.addEventListener('click', function() {
-                const expanded = mobileMenuButton.getAttribute('aria-expanded') === 'true' || false;
-                mobileMenuButton.setAttribute('aria-expanded', !expanded);
-                mobileMenu.classList.toggle('hidden');
+            if (mobileMenuButton && mobileMenu) {
+                mobileMenuButton.addEventListener('click', function() {
+                    const expanded = mobileMenuButton.getAttribute('aria-expanded') === 'true' || false;
+                    mobileMenuButton.setAttribute('aria-expanded', !expanded);
+                    mobileMenu.classList.toggle('hidden');
+                });
+            }
+
+            const toasts = Array.from(document.querySelectorAll('[data-toast]'));
+            toasts.forEach((toast) => {
+                requestAnimationFrame(() => {
+                    toast.classList.remove('translate-x-6', 'opacity-0');
+                    toast.classList.add('translate-x-0', 'opacity-100');
+                });
+
+                const closeToast = () => {
+                    toast.classList.add('translate-x-6', 'opacity-0');
+                    window.setTimeout(() => toast.remove(), 300);
+                };
+
+                const closeButton = toast.querySelector('[data-toast-close]');
+                if (closeButton) {
+                    closeButton.addEventListener('click', closeToast);
+                }
+
+                window.setTimeout(closeToast, 3000);
             });
         });
     </script>
