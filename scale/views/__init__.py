@@ -22,6 +22,7 @@ from .weighing_process import (
     weighing_process_create,
     weighing_process_edit,
     weighing_process_delete,
+    toggle_weighing_process_active,
 )
 
 # Product views

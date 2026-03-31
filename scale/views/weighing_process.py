@@ -2,6 +2,8 @@
 Weighing process management views for IntelliScale.
 Handles weighing process CRUD operations.
 """
+from django.db import transaction
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
@@ -68,4 +70,34 @@ def weighing_process_delete(request, pk):
         return redirect('scale:weighing_process_list')
     
     # If not POST, redirect to detail page
+    return redirect('scale:weighing_process_detail', pk=pk)
+
+
+@login_required
+@user_passes_test(is_admin)
+def toggle_weighing_process_active(request, pk):
+    if request.method != 'POST':
+        return redirect('scale:weighing_process_detail', pk=pk)
+
+    weighing_process = get_object_or_404(WeighingProcess, pk=pk)
+
+    with transaction.atomic():
+        if weighing_process.is_active:
+            weighing_process.is_active = False
+            weighing_process.save()
+            messages.success(request, f'Weighing process {weighing_process.name} was deactivated successfully.')
+        else:
+            WeighingProcess.objects.filter(is_active=True).exclude(pk=weighing_process.pk).update(is_active=False)
+            weighing_process.is_active = True
+            weighing_process.save()
+            messages.success(request, f'Weighing process {weighing_process.name} was activated successfully.')
+
+    next_url = request.POST.get('next')
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+
     return redirect('scale:weighing_process_detail', pk=pk)

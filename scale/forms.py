@@ -1,4 +1,5 @@
 from django import forms
+from django.db import transaction
 from .models import Scale, WeighingProcess, Product, DeliveryNote, CompanySettings, Driver, Truck, Trailer  
 import serial.tools.list_ports
 
@@ -187,32 +188,18 @@ class WeighingProcessForm(forms.ModelForm):
             'class': 'h-4 w-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500'
         }),
     }
-    
-    def clean_is_active(self):
-        is_active = self.cleaned_data.get('is_active')
-        
-        # If the process is being set to active, check for other active processes
-        if is_active:
-            # Get the current instance ID (if it exists)
-            instance_id = self.instance.id if self.instance and self.instance.pk else None
-            
-            # Check if there are any other active processes
-            other_active_processes = WeighingProcess.objects.filter(is_active=True)
-            
-            # Exclude the current instance if it exists
-            if instance_id:
-                other_active_processes = other_active_processes.exclude(id=instance_id)
-            
-            # If there are other active processes, raise a validation error
-            if other_active_processes.exists():
-                active_process = other_active_processes.first()
-                raise forms.ValidationError(
-                    f"Only one weighing process can be active at a time. "
-                    f"Another process '{active_process.name}' is currently active. "
-                    f"Please deactivate it first before activating this one."
-                )
-                
-        return is_active
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        if commit:
+            with transaction.atomic():
+                if instance.is_active:
+                    WeighingProcess.objects.filter(is_active=True).exclude(pk=instance.pk).update(is_active=False)
+                instance.save()
+                self.save_m2m()
+
+        return instance
 
 
 class ProductForm(forms.ModelForm):

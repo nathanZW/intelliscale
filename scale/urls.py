@@ -33,6 +33,7 @@ urlpatterns = [
     path('weighing-processes/create/', views.weighing_process_create, name='weighing_process_create'),
     path('weighing-processes/<int:pk>/', views.weighing_process_detail, name='weighing_process_detail'),
     path('weighing-processes/<int:pk>/edit/', views.weighing_process_edit, name='weighing_process_edit'),
+    path('weighing-processes/<int:pk>/toggle-active/', views.toggle_weighing_process_active, name='weighing_process_toggle_active'),
     path('weighing-processes/<int:pk>/delete/', views.weighing_process_delete, name='weighing_process_delete'),
     
     # Product Management URLs

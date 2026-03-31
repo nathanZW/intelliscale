@@ -27,9 +27,13 @@
             <div class="border-b border-zinc-200 px-6 py-4 flex justify-between items-center">
                 <h2 class="text-lg font-medium text-zinc-900">Weighing Process Information</h2>
                 <div class="inline-flex items-center space-x-2">
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if weighing_process.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                        {{ weighing_process.is_active|yesno:"Active,Inactive" }}
-                    </span>
+                    <form method="post" action="{% url 'scale:weighing_process_toggle_active' weighing_process.id %}" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors {% if weighing_process.is_active %}bg-green-100 text-green-800 hover:bg-green-200{% else %}bg-red-100 text-red-800 hover:bg-red-200{% endif %}" title="{% if weighing_process.is_active %}Deactivate process{% else %}Activate process{% endif %}">
+                            {{ weighing_process.is_active|yesno:"Active,Inactive" }}
+                        </button>
+                    </form>
                 </div>
             </div>
             <div class="px-6 py-4">
@@ -98,7 +102,15 @@
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-zinc-500">Status</dt>
-                        <dd class="mt-1 text-sm text-zinc-900">{{ weighing_process.is_active|yesno:"Active,Inactive" }}</dd>
+                        <dd class="mt-1 text-sm text-zinc-900">
+                            <form method="post" action="{% url 'scale:weighing_process_toggle_active' weighing_process.id %}" class="inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors {% if weighing_process.is_active %}bg-green-100 text-green-800 hover:bg-green-200{% else %}bg-red-100 text-red-800 hover:bg-red-200{% endif %}" title="{% if weighing_process.is_active %}Deactivate process{% else %}Activate process{% endif %}">
+                                    {{ weighing_process.is_active|yesno:"Active,Inactive" }}
+                                </button>
+                            </form>
+                        </dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-zinc-500">Created At</dt>

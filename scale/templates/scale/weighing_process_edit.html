@@ -253,6 +253,7 @@
                         <label for="{{ form.is_active.id_for_label }}"
                             class="ml-2 block text-sm font-medium text-zinc-700">Active</label>
                     </div>
+                    <p class="mt-1 text-xs text-zinc-500">Activating this process will automatically deactivate the currently active process.</p>
                     {% if form.is_active.errors %}
                     <p class="mt-2 text-sm text-red-600">{{ form.is_active.errors }}</p>
                     {% endif %}
