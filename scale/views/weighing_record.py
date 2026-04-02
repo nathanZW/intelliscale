@@ -272,7 +272,7 @@ def export_records_to_csv(records):
     
     writer = csv.writer(response)
     writer.writerow(['ID', 'Timestamp', 'Barcode', 'Scale', 'Product', 'Process', 'Gross Weight', 
-                    'Tare Weight', 'Net Weight', 'Unit', 'Recorded By', 'Notes', 'Delivery Note'])
+                    'Tare Weight', 'Net Weight', 'Unit', 'Recorded By', 'Notes', 'Delivery Note', 'Sync Error'])
     
     for record in records:
         writer.writerow([
@@ -288,51 +288,46 @@ def export_records_to_csv(records):
             record.unit_of_measure,
             f"{record.user.first_name} {record.user.last_name}",
             record.notes,
-            record.delivery_note.delivery_note_number if record.delivery_note else ''
+            record.delivery_note.delivery_note_number if record.delivery_note else '',
+            record.sync_error_message or ''
         ])
     
     return response
 
 
 def export_records_to_excel(records):
-    import xlwt
+    import openpyxl
     
-    response = HttpResponse(content_type='application/ms-excel')
-    response['Content-Disposition'] = 'attachment; filename="weighing_records.xls"'
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="weighing_records.xlsx"'
     
-    wb = xlwt.Workbook(encoding='utf-8')
-    ws = wb.add_sheet('Weighing Records')
-    
-    # Sheet header, first row
-    row_num = 0
-    
-    font_style = xlwt.XFStyle()
-    font_style.font.bold = True
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Weighing Records'
     
     columns = ['ID', 'Timestamp', 'Barcode', 'Scale', 'Product', 'Process', 'Gross Weight', 
-              'Tare Weight', 'Net Weight', 'Unit', 'Recorded By', 'Notes', 'Delivery Note']
+              'Tare Weight', 'Net Weight', 'Unit', 'Recorded By', 'Notes', 'Delivery Note', 'Sync Error']
     
-    for col_num in range(len(columns)):
-        ws.write(row_num, col_num, columns[col_num], font_style)
-    
-    # Sheet body, remaining rows
-    font_style = xlwt.XFStyle()
-    
-    for record in records:
-        row_num += 1
-        ws.write(row_num, 0, record.id, font_style)
-        ws.write(row_num, 1, record.timestamp.strftime('%Y-%m-%d %H:%M:%S'), font_style)
-        ws.write(row_num, 2, record.barcode, font_style)
-        ws.write(row_num, 3, record.scale.name, font_style)
-        ws.write(row_num, 4, record.product.name, font_style)
-        ws.write(row_num, 5, record.process.name, font_style)
-        ws.write(row_num, 6, float(record.gross_weight), font_style)
-        ws.write(row_num, 7, float(record.tare_weight), font_style)
-        ws.write(row_num, 8, float(record.net_weight), font_style)
-        ws.write(row_num, 9, record.unit_of_measure, font_style)
-        ws.write(row_num, 10, f"{record.user.first_name} {record.user.last_name}", font_style)
-        ws.write(row_num, 11, record.notes, font_style)
-        ws.write(row_num, 12, record.delivery_note.delivery_note_number if record.delivery_note else '', font_style)
+    # Sheet header
+    for col_num, column_title in enumerate(columns, 1):
+        cell = ws.cell(row=1, column=col_num, value=column_title)
+        # We can set bold using openpyxl.styles.Font if needed, but keeping it simple
+        
+    # Sheet body
+    for row_num, record in enumerate(records, 2):
+        ws.cell(row=row_num, column=1, value=record.id)
+        ws.cell(row=row_num, column=2, value=record.timestamp.strftime('%Y-%m-%d %H:%M:%S'))
+        ws.cell(row=row_num, column=3, value=record.barcode)
+        ws.cell(row=row_num, column=4, value=record.scale.name)
+        ws.cell(row=row_num, column=5, value=record.product.name)
+        ws.cell(row=row_num, column=6, value=float(record.gross_weight))
+        ws.cell(row=row_num, column=7, value=float(record.tare_weight))
+        ws.cell(row=row_num, column=8, value=float(record.net_weight))
+        ws.cell(row=row_num, column=9, value=record.unit_of_measure)
+        ws.cell(row=row_num, column=10, value=f"{record.user.first_name} {record.user.last_name}")
+        ws.cell(row=row_num, column=11, value=record.notes)
+        ws.cell(row=row_num, column=12, value=record.delivery_note.delivery_note_number if record.delivery_note else '')
+        ws.cell(row=row_num, column=13, value=record.sync_error_message or '')
     
     wb.save(response)
     return response
@@ -355,7 +350,7 @@ def export_records_to_pdf(records):
     
     # Table data
     data = [['ID', 'Timestamp', 'Barcode', 'Scale', 'Product', 'Process', 'Gross', 
-            'Tare', 'Net', 'Unit', 'Recorded By', 'Delivery Note']]
+            'Tare', 'Net', 'Unit', 'Recorded By', 'Delivery Note', 'Sync Error']]
     
     for record in records:
         data.append([
@@ -370,7 +365,8 @@ def export_records_to_pdf(records):
             str(record.net_weight),
             record.unit_of_measure,
             f"{record.user.first_name} {record.user.last_name}",
-            record.delivery_note.delivery_note_number if record.delivery_note else ''
+            record.delivery_note.delivery_note_number if record.delivery_note else '',
+            record.sync_error_message or ''
         ])
     
     # Create the table
