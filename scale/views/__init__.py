@@ -47,6 +47,7 @@ from .delivery_note import (
     delivery_note_create,
     delivery_note_edit,
     delivery_note_delete,
+    delivery_note_delete_weighing_records,
     generate_delivery_note_number,
     recall_delivery_note,
     delivery_note_suspend,

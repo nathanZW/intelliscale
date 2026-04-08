@@ -108,7 +108,9 @@ def delivery_note_delete(request, pk):
     
     if request.method == 'POST':
         name = delivery_note.delivery_note_number
-        delivery_note.delete()
+        with transaction.atomic():
+            WeighingRecord.objects.filter(delivery_note=delivery_note).delete()
+            delivery_note.delete()
         messages.success(request, f'Delivery Note {name} was deleted successfully.')
         return redirect('scale:delivery_note_list')
     
@@ -117,6 +119,33 @@ def delivery_note_delete(request, pk):
         'delivery_note': delivery_note,
     }
     return render(request, 'scale/delivery_note_delete.html', context)
+
+
+@login_required
+@user_passes_test(is_admin)
+def delivery_note_delete_weighing_records(request, pk):
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk)
+
+    if request.method == 'POST':
+        with transaction.atomic():
+            deleted_count, _ = WeighingRecord.objects.filter(delivery_note=delivery_note).delete()
+            delivery_note.scanned_barcodes = []
+            delivery_note.scanned_bales_count = 0
+            delivery_note.is_being_scanned = False
+            delivery_note.save(update_fields=['scanned_barcodes', 'scanned_bales_count', 'is_being_scanned', 'updated_at'])
+
+        if deleted_count:
+            messages.success(
+                request,
+                f'Deleted {deleted_count} weighing record{"s" if deleted_count != 1 else ""} for delivery note {delivery_note.delivery_note_number}.'
+            )
+        else:
+            messages.info(
+                request,
+                f'No weighing records were found for delivery note {delivery_note.delivery_note_number}.'
+            )
+
+    return redirect('scale:delivery_note_detail', pk=pk)
 
 
 @login_required

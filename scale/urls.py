@@ -49,6 +49,7 @@ urlpatterns = [
     path('delivery-notes/<int:pk>/', views.delivery_note_detail, name='delivery_note_detail'),
     path('delivery-notes/<int:pk>/edit/', views.delivery_note_edit, name='delivery_note_edit'),
     path('delivery-notes/<int:pk>/delete/', views.delivery_note_delete, name='delivery_note_delete'),
+    path('delivery-notes/<int:pk>/delete-weighing-records/', views.delivery_note_delete_weighing_records, name='delivery_note_delete_weighing_records'),
     path('delivery-notes/<int:pk>/close/', views.close_delivery_note, name='close_delivery_note'),
     path('delivery-notes/<int:pk>/close-commercial/', views.close_commercial_delivery_note, name='close_commercial_delivery_note'),
     path('delivery-notes/<int:pk>/deactivate/', views.deactivate_active_delivery_note, name='deactivate_delivery_note'),
