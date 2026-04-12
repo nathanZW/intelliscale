@@ -92,9 +92,9 @@ fi
 print_status "Running Django migrations..."
 python manage.py migrate --noinput
 
-# Collect static files (if needed)
-# print_status "Collecting static files..."
-# python manage.py collectstatic --noinput
+# Collect static files for WhiteNoise
+print_status "Collecting static files..."
+python manage.py collectstatic --noinput
 
 # Start Django development server
 print_status "Starting Django development server on port $DJANGO_PORT..."

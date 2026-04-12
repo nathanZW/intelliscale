@@ -24,6 +24,10 @@ source "$VENV_PATH/bin/activate"
 echo -e "${YELLOW}Running migrations...${NC}"
 python manage.py migrate --noinput
 
+# Collect static assets for WhiteNoise
+echo -e "${YELLOW}Collecting static files...${NC}"
+python manage.py collectstatic --noinput
+
 # Function to cleanup on exit
 cleanup() {
     echo -e "\n${YELLOW}Shutting down...${NC}"

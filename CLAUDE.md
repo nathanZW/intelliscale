@@ -44,18 +44,20 @@ python manage.py test users
 
 1. **Scale Reading**: Physical scales connect via serial ports. The satellite service (`scale/satellite_service.py`) polls active scales in a loop, writes weights to a JSON cache file (`.satellite_cache.json`). Web views read from this cache to avoid SQLite contention with Gunicorn workers.
 2. **Weighing Station** (`scale/views/weighing_station.py`): Operator scans barcodes, gets weight from scale, saves `WeighingRecord` linked to a `DeliveryNote` and `WeighingProcess`.
-3. **Odoo Sync**: Celery beat tasks (`scale/tasks.py`) poll Odoo API every 30s to fetch delivery notes, and check for completed ones every minute. Delivery notes store full Odoo response in a `JSONField` (`odoo_data`).
+3. **Odoo Sync**: Celery beat task `sync_odoo_delivery_notes` polls Odoo API every 60s to fetch delivery notes. `check_completed_delivery_notes` is defined but currently disabled. Delivery notes store full Odoo response in a `JSONField` (`odoo_data`).
 4. **Printing Station** (`scale/views/printing.py`): Separate workflow for printing labels with weight/moisture data.
 
 ### Models (`scale/models/`)
 
 - `Scale` - Physical scale config (COM port, baud rate, serial params, Mettler Toledo flag)
+- `ScaleIdHistory` - Tracks historical scale ID assignments
 - `WeighingProcess` - Configurable weighing workflow (fields, validation rules, process type)
 - `WeighingRecord` - Individual weight measurement (gross/tare/net, barcode, custom JSON data)
 - `DeliveryNote` - Groups weighing records, tracks scanned barcodes, syncs with Odoo. Has QR code generation and bale tracking logic.
 - `CompanySettings` - Singleton-style config (API URL, API key, satellite mode toggle)
 - `Product`, `Driver`, `Truck`, `Trailer` - Reference data
 - `PrintingNote`, `PrintingRecord` - Printing workflow records
+- `ErpSystem` - ERP system configuration
 
 ### Views (`scale/views/`)
 
@@ -63,8 +65,8 @@ Views are split into modules by domain: `scale.py`, `weighing_station.py`, `weig
 
 ### Background Services
 
-- **Celery tasks** (`scale/tasks.py`): `sync_odoo_delivery_notes` (every 30s) and `check_completed_delivery_notes` (every 1min). Uses Redis as broker.
-- **Satellite service** (`scale/satellite_service.py`): Standalone management command (`run_satellite`) that polls scales via serial and writes to `.satellite_cache.json`. Must be enabled in `CompanySettings.satellite`.
+- **Celery tasks** (`scale/tasks.py`): `sync_odoo_delivery_notes` (every 60s) is scheduled via Celery beat. `check_completed_delivery_notes` is defined but currently commented out in settings. Uses Redis as broker (`redis://localhost:6379/0`).
+- **Satellite service** (`scale/satellite_service.py`): Standalone management command (`run_satellite`) that polls scales via serial and writes to `.satellite_cache.json`. Must be enabled in `CompanySettings.satellite`. Supports Generic, Mettler Toledo, and CAS Stream protocols.
 
 ### Signals
 
@@ -72,10 +74,11 @@ Views are split into modules by domain: `scale.py`, `weighing_station.py`, `weig
 
 ## Tech Stack
 
-- Django 5.2 with SQLite (PostgreSQL config commented out in settings)
-- Celery 5.4 + Redis for async tasks
-- pyserial for scale communication
-- openpyxl for Excel export, qrcode + Pillow for QR generation
+- Django 5.2.1 with SQLite (WAL mode enabled; PostgreSQL config commented out in settings)
+- Celery 5.4.0 + Redis (`redis://localhost:6379/0`) for async tasks
+- pyserial 3.5 for scale communication
+- openpyxl 3.1.5 for Excel export, qrcode 8.0 + Pillow 10.4.0 for QR generation
+- reportlab 4.4.10 for PDF exports
 - Production: Gunicorn + Nginx (setup via external install script)
 - Templates use Django template engine with Bootstrap (server-rendered HTML)
 
@@ -85,3 +88,5 @@ Views are split into modules by domain: `scale.py`, `weighing_station.py`, `weig
 - `.app_sequence.config` contains an Eraser.io sequence diagram of the full application flow
 - Config import/export available via admin dashboard (`scale/views/settings.py`)
 - Time zone set to `Africa/Harare` in settings
+- Startup scripts: `start_app.sh` (full stack with logging), `start_simple.sh`, `start_tmux.sh` (tmux panes), `celery.sh` (service control)
+- Linux auto-boot services configured via external setup scripts (celery, nginx, gunicorn, intelliscale-satellite)

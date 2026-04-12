@@ -44,6 +44,8 @@ tmux send-keys -t "$SESSION_NAME:0.0" "cd $PROJECT_DIR" Enter
 tmux send-keys -t "$SESSION_NAME:0.0" "source $VENV_PATH/bin/activate" Enter
 tmux send-keys -t "$SESSION_NAME:0.0" "echo 'Running Django migrations...'" Enter
 tmux send-keys -t "$SESSION_NAME:0.0" "python manage.py migrate --noinput" Enter
+tmux send-keys -t "$SESSION_NAME:0.0" "echo 'Collecting static files...'" Enter
+tmux send-keys -t "$SESSION_NAME:0.0" "python manage.py collectstatic --noinput" Enter
 tmux send-keys -t "$SESSION_NAME:0.0" "echo 'Starting Django Server...'" Enter
 tmux send-keys -t "$SESSION_NAME:0.0" "python manage.py runserver 0.0.0.0:8000" Enter
 
