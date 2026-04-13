@@ -2327,7 +2327,7 @@
                         activeCard.classList.remove('hidden');
                     }
                     // Update delivery note ID in hidden input
-                    if (activeDeliveryNoteId) {
+                    if (activeDeliveryNoteId && deliveryNote.id !== undefined && deliveryNote.id !== null && deliveryNote.id !== '') {
                         activeDeliveryNoteId.value = deliveryNote.id;
                     }
                     // Update display fields with null checks
@@ -2337,12 +2337,12 @@
                     const locationEl = document.getElementById('active-location');
                     const sellingPointEl = document.getElementById('active-selling-point');
                     const saleDateEl = document.getElementById('active-sale-date');
-                    if (dnoteNumberEl) dnoteNumberEl.textContent = deliveryNote.delivery_note_number;
-                    if (growerNameEl) growerNameEl.textContent = deliveryNote.grower_name;
-                    if (growerNumberEl) growerNumberEl.textContent = deliveryNote.grower_number;
-                    if (locationEl) locationEl.textContent = deliveryNote.location_name;
-                    if (sellingPointEl) sellingPointEl.textContent = deliveryNote.selling_point_name;
-                    if (saleDateEl) saleDateEl.textContent = deliveryNote.preferred_sale_date;
+                    if (dnoteNumberEl && deliveryNote.delivery_note_number !== undefined) dnoteNumberEl.textContent = deliveryNote.delivery_note_number;
+                    if (growerNameEl && deliveryNote.grower_name !== undefined) growerNameEl.textContent = deliveryNote.grower_name;
+                    if (growerNumberEl && deliveryNote.grower_number !== undefined) growerNumberEl.textContent = deliveryNote.grower_number;
+                    if (locationEl && deliveryNote.location_name !== undefined) locationEl.textContent = deliveryNote.location_name;
+                    if (sellingPointEl && deliveryNote.selling_point_name !== undefined) sellingPointEl.textContent = deliveryNote.selling_point_name;
+                    if (saleDateEl && deliveryNote.preferred_sale_date !== undefined) saleDateEl.textContent = deliveryNote.preferred_sale_date;
                     // Update progress
                     const progressText = document.getElementById('progress-text');
                     const progressBar = document.getElementById('progress-bar');
