@@ -333,7 +333,7 @@ def _read_scale_weight(scale):
         if not ser.is_open:
             return None, None, None, 'Scale serial port is not open'
 
-        line = read_weight_bytes_for_scale(scale, ser)
+        line = read_weight_bytes_for_scale(scale, ser, prefer_low_latency=True)
         if not line:
             return None, None, None, 'Scale connected but returned no data. Check connection and scale settings.'
 

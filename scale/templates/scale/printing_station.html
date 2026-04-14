@@ -592,9 +592,18 @@
         updateTareDisplay();
 
         // Get Weight Function
+        const WEIGHT_POLL_INTERVAL_MS = 500;
+        let weightPollingTimeout = null;
+        let weightPollingEnabled = false;
+        let weightRequestInFlight = false;
+
         function getWeight() {
             const scaleId = $(scaleSelect).val();
             if (!scaleId) return;
+
+            if (weightRequestInFlight) return;
+
+            weightRequestInFlight = true;
 
             $.ajax({
                 url: "{% url 'scale:get_weight' 0 %}".replace('0', scaleId),
@@ -622,6 +631,12 @@
                         const headerNetValue = document.getElementById('header-net-value');
                         if (headerNetValue) headerNetValue.textContent = net.toFixed(2);
                     }
+                },
+                complete: function() {
+                    weightRequestInFlight = false;
+                    if (weightPollingEnabled) {
+                        scheduleWeightPoll();
+                    }
                 }
             });
         }
@@ -629,12 +644,59 @@
         // Bind Get Weight Button
         getWeightBtn.addEventListener('click', getWeight);
 
-        // Simple Polling (every 500ms if scale selected)
-        let weightPollingInterval = setInterval(function() {
-            if ($(scaleSelect).val()) {
-                getWeight();
+        function stopWeightPolling() {
+            weightPollingEnabled = false;
+            if (weightPollingTimeout) {
+                clearTimeout(weightPollingTimeout);
+                weightPollingTimeout = null;
             }
-        }, 500);
+        }
+
+        function scheduleWeightPoll(delay = WEIGHT_POLL_INTERVAL_MS) {
+            if (!weightPollingEnabled) return;
+
+            if (weightPollingTimeout) {
+                clearTimeout(weightPollingTimeout);
+            }
+
+            weightPollingTimeout = setTimeout(function() {
+                weightPollingTimeout = null;
+
+                if (!$(scaleSelect).val()) {
+                    return;
+                }
+
+                if (weightRequestInFlight) {
+                    scheduleWeightPoll(100);
+                    return;
+                }
+
+                getWeight();
+            }, delay);
+        }
+
+        function startWeightPolling() {
+            weightPollingEnabled = true;
+            scheduleWeightPoll();
+        }
+
+        $(scaleSelect).on('change', function() {
+            if ($(this).val()) {
+                startWeightPolling();
+            } else {
+                stopWeightPolling();
+            }
+        });
+
+        $(window).on('load', function() {
+            if ($(scaleSelect).val()) {
+                startWeightPolling();
+            }
+        });
+
+        $(window).on('beforeunload', function() {
+            stopWeightPolling();
+        });
 
 
         // --- UI Logic ---

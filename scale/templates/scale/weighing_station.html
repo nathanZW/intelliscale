@@ -1530,7 +1530,10 @@
         
         // Get Weight button functionality
         const getWeightBtn = document.getElementById('get-weight-btn');
-        let weightPollingInterval;
+        const WEIGHT_POLL_INTERVAL_MS = 300;
+        let weightPollingTimeout = null;
+        let weightPollingEnabled = false;
+        let weightRequestInFlight = false;
         let currentLiveWeight = 0;
 
         function getWeightFromScale(callback) {
@@ -1543,6 +1546,12 @@
                 console.log('Please select a scale first');
                 return;
             }
+
+            if (weightRequestInFlight) {
+                return;
+            }
+
+            weightRequestInFlight = true;
             
             // Send request to get weight
             $.ajax({
@@ -1560,6 +1569,12 @@
                 },
                 error: function(xhr, status, error) {
                     console.log('Error getting weight: ' + error);
+                },
+                complete: function() {
+                    weightRequestInFlight = false;
+                    if (weightPollingEnabled) {
+                        scheduleWeightPoll();
+                    }
                 }
             });
         }
@@ -1598,36 +1613,66 @@
             }
         }
 
+        function stopWeightPolling() {
+            weightPollingEnabled = false;
+            if (weightPollingTimeout) {
+                clearTimeout(weightPollingTimeout);
+                weightPollingTimeout = null;
+            }
+        }
+
+        function scheduleWeightPoll(delay = WEIGHT_POLL_INTERVAL_MS) {
+            if (!weightPollingEnabled) {
+                return;
+            }
+
+            if (weightPollingTimeout) {
+                clearTimeout(weightPollingTimeout);
+            }
+
+            weightPollingTimeout = setTimeout(function() {
+                weightPollingTimeout = null;
+
+                if (!$('#scale-select').val()) {
+                    return;
+                }
+
+                if (weightRequestInFlight) {
+                    scheduleWeightPoll(100);
+                    return;
+                }
+
+                if (processType === 'WeighBridge') {
+                    updateLiveWeight();
+                } else {
+                    getWeight();
+                }
+            }, delay);
+        }
+
+        function startWeightPolling() {
+            weightPollingEnabled = true;
+            scheduleWeightPoll();
+        }
+
         // Start polling when scale is selected
         $('#scale-select').change(function() {
-            // Clear any existing interval
-            if (weightPollingInterval) {
-                clearInterval(weightPollingInterval);
-            }
-            
-            // If a scale is selected, start polling
             if ($(this).val()) {
-                if (processType === 'WeighBridge') {
-                    weightPollingInterval = setInterval(updateLiveWeight, 300); // Poll every third of a second for live weight
-                } else {
-                    weightPollingInterval = setInterval(getWeight, 300); // Poll every third of a second for direct weight
-                }
+                startWeightPolling();
+            } else {
+                stopWeightPolling();
             }
         });
 
         $(window).on('load', function() {
-            if (processType === 'WeighBridge') {
-                weightPollingInterval = setInterval(updateLiveWeight, 300);
-            } else {
-                weightPollingInterval = setInterval(getWeight, 300);
+            if ($('#scale-select').val()) {
+                startWeightPolling();
             }
         });
 
         // Stop polling when leaving the page
         $(window).on('beforeunload', function() {
-            if (weightPollingInterval) {
-                clearInterval(weightPollingInterval);
-            }
+            stopWeightPolling();
         });
 
         // Manual get weight button still works

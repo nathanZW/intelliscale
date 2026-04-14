@@ -334,7 +334,7 @@ def parse_weight_from_bytes(line):
     return None, decoded.strip()
 
 
-def read_weight_from_serial(ser):
+def read_weight_from_serial(ser, buffered_max_wait=0.3, buffered_settle_time=0.05):
     """
     Robustly reads weight data from the serial port.
     
@@ -348,7 +348,12 @@ def read_weight_from_serial(ser):
     ser.timeout = 1
     
     try:
-        buffered_line = _read_until_idle(ser, wait_for_first_byte=True, max_wait=0.3, settle_time=0.05)
+        buffered_line = _read_until_idle(
+            ser,
+            wait_for_first_byte=True,
+            max_wait=buffered_max_wait,
+            settle_time=buffered_settle_time,
+        )
         if buffered_line:
             weight, _ = parse_weight_from_bytes(buffered_line)
             if weight is not None:
@@ -385,7 +390,9 @@ def read_weight_from_serial(ser):
         ser.timeout = original_timeout
 
 
-def read_weight_bytes_for_scale(scale, ser):
+def read_weight_bytes_for_scale(scale, ser, prefer_low_latency=False):
     if uses_cas_stream_protocol(scale):
         return read_cas_stream_sample(ser)
+    if prefer_low_latency and not uses_mettler_protocol(scale):
+        return read_weight_from_serial(ser, buffered_max_wait=0.1, buffered_settle_time=0.02)
     return read_weight_from_serial(ser)
