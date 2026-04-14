@@ -14,19 +14,14 @@ from ..forms import ScaleForm
 import serial
 import serial.tools.list_ports
 import re
-import threading
 import time
 from ..scale_utils import (
-    get_scale_protocol,
     open_serial_for_scale,
     parse_weight_from_bytes,
     read_weight_bytes_for_scale,
     uses_cas_stream_protocol,
     uses_mettler_protocol,
 )
-
-DIRECT_SERIAL_READERS = {}
-DIRECT_SERIAL_IDLE_TTL_SECONDS = 15
 
 
 def _get_satellite_cached_weight(scale, tare_weight=0):
@@ -331,97 +326,14 @@ def _serial_timeout_for_scale(scale):
     return scale.timeout or 2
 
 
-def _direct_reader_signature(scale):
-    return (
-        get_scale_protocol(scale),
-        scale.com_port,
-        scale.baud_rate or 9600,
-        _serial_timeout_for_scale(scale),
-        scale.parity or 'N',
-        scale.stop_bits or 1,
-        scale.data_bits or 8,
-    )
-
-
-def _close_direct_reader(scale_key):
-    state = DIRECT_SERIAL_READERS.pop(scale_key, None)
-    if not state:
-        return
-
-    ser = state.get('ser')
-    if ser and ser.is_open:
-        try:
-            ser.close()
-        except Exception:
-            pass
-
-
-def _close_idle_direct_readers(exclude_scale_key=None):
-    now = time.monotonic()
-    for scale_key, state in list(DIRECT_SERIAL_READERS.items()):
-        if exclude_scale_key is not None and scale_key == exclude_scale_key:
-            continue
-
-        last_used_at = state.get('last_used_at', now)
-        if (now - last_used_at) >= DIRECT_SERIAL_IDLE_TTL_SECONDS:
-            _close_direct_reader(scale_key)
-
-
-def _get_or_open_direct_reader(scale):
-    scale_key = scale.pk
-    signature = _direct_reader_signature(scale)
-    state = DIRECT_SERIAL_READERS.get(scale_key)
-
-    if state and state.get('signature') == signature:
-        ser = state.get('ser')
-        if ser and ser.is_open:
-            state['last_used_at'] = time.monotonic()
-            return state
-        _close_direct_reader(scale_key)
-    elif state:
-        _close_direct_reader(scale_key)
-
-    ser = open_serial_for_scale(scale, timeout=_serial_timeout_for_scale(scale))
-    state = {
-        'ser': ser,
-        'signature': signature,
-        'lock': threading.Lock(),
-        'last_used_at': time.monotonic(),
-    }
-    DIRECT_SERIAL_READERS[scale_key] = state
-    return state
-
-
-def _should_use_persistent_direct_reader(scale):
-    return not uses_mettler_protocol(scale) and not uses_cas_stream_protocol(scale)
-
-
 def _read_scale_weight(scale):
-    scale_key = scale.pk
-    use_persistent_reader = _should_use_persistent_direct_reader(scale)
     ser = None
-
     try:
-        if use_persistent_reader:
-            state = _get_or_open_direct_reader(scale)
-            _close_idle_direct_readers(exclude_scale_key=scale_key)
+        ser = open_serial_for_scale(scale, timeout=_serial_timeout_for_scale(scale))
+        if not ser.is_open:
+            return None, None, None, 'Scale serial port is not open'
 
-            with state['lock']:
-                state['last_used_at'] = time.monotonic()
-                ser = state['ser']
-                if not ser.is_open:
-                    _close_direct_reader(scale_key)
-                    return None, None, None, 'Scale serial port is not open'
-
-                line = read_weight_bytes_for_scale(scale, ser, prefer_low_latency=True)
-                state['last_used_at'] = time.monotonic()
-        else:
-            ser = open_serial_for_scale(scale, timeout=_serial_timeout_for_scale(scale))
-            if not ser.is_open:
-                return None, None, None, 'Scale serial port is not open'
-
-            line = read_weight_bytes_for_scale(scale, ser, prefer_low_latency=True)
-
+        line = read_weight_bytes_for_scale(scale, ser, prefer_low_latency=True)
         if not line:
             return None, None, None, 'Scale connected but returned no data. Check connection and scale settings.'
 
@@ -432,12 +344,8 @@ def _read_scale_weight(scale):
         unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
         unit = unit_match.group(1).lower() if unit_match else 'kg'
         return weight, raw_str, line, unit
-    except serial.SerialException:
-        if use_persistent_reader:
-            _close_direct_reader(scale_key)
-        raise
     finally:
-        if not use_persistent_reader and ser and ser.is_open:
+        if ser and ser.is_open:
             ser.close()
 
 
