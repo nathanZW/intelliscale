@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+import json
 from pathlib import Path
 
 from django.http import HttpResponse
@@ -109,3 +110,53 @@ class LogViewerTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'not available yet')
+
+    def test_admin_can_wipe_selected_log_file(self):
+        log_dir = Path(self.temp_dir)
+        api_log = log_dir / 'api.log'
+        requests_log = log_dir / 'requests.log'
+        api_log.write_text(
+            'ERROR 2026-04-17 11:01:00,123 [intelliscale.api] api_error call_id=2 path=/api/two\n',
+            encoding='utf-8',
+        )
+        requests_log.write_text(
+            'INFO 2026-04-17 11:02:00,123 [intelliscale.web] request request_id=1 path=/scale/\n',
+            encoding='utf-8',
+        )
+
+        self.client.force_login(self.admin_user)
+        response = self.client.post(
+            reverse('scale:clear_log_data'),
+            data=json.dumps({'password': 'password123', 'log': 'api'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content,
+            {'success': True, 'message': 'Cleared 1 log file(s) for API Traffic.'},
+        )
+        self.assertEqual(api_log.read_text(encoding='utf-8'), '')
+        self.assertIn('request_id=1', requests_log.read_text(encoding='utf-8'))
+
+    def test_clear_log_data_rejects_incorrect_password(self):
+        log_dir = Path(self.temp_dir)
+        api_log = log_dir / 'api.log'
+        api_log.write_text(
+            'ERROR 2026-04-17 11:01:00,123 [intelliscale.api] api_error call_id=2 path=/api/two\n',
+            encoding='utf-8',
+        )
+
+        self.client.force_login(self.admin_user)
+        response = self.client.post(
+            reverse('scale:clear_log_data'),
+            data=json.dumps({'password': 'wrong-password', 'log': 'api'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content,
+            {'success': False, 'message': 'Incorrect password.'},
+        )
+        self.assertIn('api_error', api_log.read_text(encoding='utf-8'))

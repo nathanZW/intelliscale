@@ -58,6 +58,28 @@
         </form>
     </div>
 
+    <div class="rounded-xl border border-red-200 bg-red-50 p-5 shadow-sm">
+        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+                <h2 class="text-base font-semibold text-red-900">Clear Log Data</h2>
+                <p class="mt-1 text-sm text-red-700">
+                    {% if selected_log == 'all' %}
+                        Wipe the contents of all available system log files.
+                    {% else %}
+                        Wipe the contents of the currently selected log file: {{ selected_log_label }}.
+                    {% endif %}
+                </p>
+            </div>
+            <button
+                type="button"
+                id="clear-log-data-btn"
+                class="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+                {% if selected_log == 'all' %}Wipe All Log Data{% else %}Wipe Selected Log{% endif %}
+            </button>
+        </div>
+    </div>
+
     {% if missing_logs %}
         <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             <p class="font-medium">Some log files are not available yet.</p>
@@ -100,4 +122,148 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const clearLogDataBtn = document.getElementById('clear-log-data-btn');
+        if (!clearLogDataBtn) {
+            return;
+        }
+
+        const selectedLog = '{{ selected_log }}';
+        const selectedLogLabel = '{{ selected_log_label|escapejs }}';
+
+        const passwordModal = document.createElement('div');
+        passwordModal.id = 'password-modal';
+        passwordModal.className = 'relative z-50 hidden';
+        passwordModal.setAttribute('aria-labelledby', 'modal-title');
+        passwordModal.setAttribute('role', 'dialog');
+        passwordModal.setAttribute('aria-modal', 'true');
+        passwordModal.innerHTML = `
+            <div class="fixed inset-0 bg-zinc-500 bg-opacity-75 transition-opacity"></div>
+            <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+                <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                    <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-zinc-200">
+                        <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                            <div class="sm:flex sm:items-start">
+                                <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                                    <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
+                                    <h3 class="text-base font-semibold leading-6 text-zinc-900" id="modal-title">Wipe Log Data</h3>
+                                    <div class="mt-2 text-sm text-zinc-500">
+                                        <p id="modal-description"></p>
+                                        <p class="mt-4 font-medium text-zinc-700">Please enter your admin password to confirm:</p>
+                                        <div class="mt-2 text-left">
+                                            <input type="password" id="admin-password" class="block w-full rounded-md border-zinc-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm p-2 border" placeholder="Admin Password">
+                                        </div>
+                                        <p id="password-error" class="hidden mt-2 text-sm text-red-600"></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-zinc-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-zinc-200">
+                            <button type="button" id="confirm-delete-btn" class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto">Confirm Wipe</button>
+                            <button type="button" id="cancel-delete-btn" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-zinc-900 shadow-sm ring-1 ring-inset ring-zinc-300 hover:bg-zinc-50 sm:mt-0 sm:w-auto">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(passwordModal);
+
+        const modalDescription = document.getElementById('modal-description');
+        const adminPasswordInput = document.getElementById('admin-password');
+        const passwordError = document.getElementById('password-error');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function openModal() {
+            modalDescription.textContent = selectedLog === 'all'
+                ? 'This will permanently wipe the contents of all available system log files. Logging will continue into fresh files immediately after this action.'
+                : `This will permanently wipe the contents of the ${selectedLogLabel} log file. Logging will continue into the same file immediately after this action.`;
+            adminPasswordInput.value = '';
+            passwordError.classList.add('hidden');
+            passwordModal.classList.remove('hidden');
+            setTimeout(() => adminPasswordInput.focus(), 100);
+        }
+
+        function closeModal() {
+            passwordModal.classList.add('hidden');
+        }
+
+        clearLogDataBtn.addEventListener('click', openModal);
+        cancelDeleteBtn.addEventListener('click', closeModal);
+
+        adminPasswordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                confirmDeleteBtn.click();
+            }
+        });
+
+        confirmDeleteBtn.addEventListener('click', function() {
+            const password = adminPasswordInput.value;
+            if (!password) {
+                passwordError.textContent = 'Password is required.';
+                passwordError.classList.remove('hidden');
+                return;
+            }
+
+            const originalText = confirmDeleteBtn.textContent;
+            confirmDeleteBtn.disabled = true;
+            confirmDeleteBtn.textContent = 'Wiping...';
+
+            fetch('{% url "scale:clear_log_data" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    password: password,
+                    log: selectedLog
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeModal();
+                    window.location.reload();
+                } else {
+                    passwordError.textContent = data.message || 'An error occurred. Please try again.';
+                    passwordError.classList.remove('hidden');
+                    confirmDeleteBtn.disabled = false;
+                    confirmDeleteBtn.textContent = originalText;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                passwordError.textContent = 'A network error occurred. Please try again.';
+                passwordError.classList.remove('hidden');
+                confirmDeleteBtn.disabled = false;
+                confirmDeleteBtn.textContent = originalText;
+            });
+        });
+    });
+</script>
 {% endblock %}

@@ -88,6 +88,7 @@ from .settings import (
     config_export,
     data_management,
     log_viewer,
+    clear_log_data,
     delete_all_delivery_notes,
     delete_all_weighing_records,
 )
