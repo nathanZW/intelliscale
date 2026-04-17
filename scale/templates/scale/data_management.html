@@ -15,6 +15,18 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="md:col-span-2 bg-white shadow rounded-lg border border-zinc-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-zinc-200 bg-zinc-50 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h3 class="text-lg font-medium text-zinc-900">System Log Viewer</h3>
+                    <p class="mt-1 text-sm text-zinc-600">Investigate request traffic, outbound API responses, and database lock errors before deleting data.</p>
+                </div>
+                <a href="{% url 'scale:log_viewer' %}" class="inline-flex items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+                    Open Log Viewer
+                </a>
+            </div>
+        </div>
+
         <!-- Delete Delivery Notes Section -->
         <div class="bg-white shadow rounded-lg border border-zinc-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-zinc-200 bg-zinc-50">

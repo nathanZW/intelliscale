@@ -2,6 +2,11 @@
 Company settings and configuration views for IntelliScale.
 Handles company settings, config import/export, and data management.
 """
+from collections import deque
+from pathlib import Path
+import re
+
+from django.conf import settings
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
@@ -14,6 +19,86 @@ from ..models import (
 )
 from ..forms import CompanySettingsForm
 import json
+
+
+LOG_FILE_CHOICES = {
+    'all': ('all', 'All Logs'),
+    'requests': ('requests.log', 'Web Requests'),
+    'api': ('api.log', 'API Traffic'),
+    'database': ('database.log', 'Database'),
+    'app': ('app.log', 'Application'),
+}
+LOG_LEVELS = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
+TIMESTAMP_PATTERN = re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})')
+LEVEL_PATTERN = re.compile(r'\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b')
+
+
+def _coerce_line_limit(raw_value, default=200, minimum=50, maximum=1000):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
+
+
+def _tail_lines(path, max_lines):
+    with path.open('r', encoding='utf-8', errors='replace') as handle:
+        return list(deque(handle, maxlen=max_lines))
+
+
+def _parse_log_line(source_key, source_label, line):
+    cleaned = line.rstrip()
+    if not cleaned:
+        return None
+
+    timestamp_match = TIMESTAMP_PATTERN.search(cleaned)
+    level_match = LEVEL_PATTERN.search(cleaned)
+
+    return {
+        'source': source_key,
+        'source_label': source_label,
+        'timestamp': timestamp_match.group(1) if timestamp_match else '',
+        'level': level_match.group(1) if level_match else 'UNKNOWN',
+        'message': cleaned,
+    }
+
+
+def _iter_selected_logs(selected_log):
+    if selected_log == 'all':
+        for source_key in ('requests', 'api', 'database', 'app'):
+            yield source_key, LOG_FILE_CHOICES[source_key][1], settings.LOG_DIR / LOG_FILE_CHOICES[source_key][0]
+        return
+
+    log_details = LOG_FILE_CHOICES.get(selected_log)
+    if not log_details or selected_log == 'all':
+        return
+
+    yield selected_log, log_details[1], settings.LOG_DIR / log_details[0]
+
+
+def _load_log_entries(selected_log, selected_level, search_text, line_limit):
+    entries = []
+    missing_logs = []
+    per_file_limit = line_limit if selected_log != 'all' else min(line_limit * 3, 3000)
+    search_text = (search_text or '').strip().lower()
+
+    for source_key, source_label, path in _iter_selected_logs(selected_log):
+        if not path.exists():
+            missing_logs.append({'source': source_key, 'label': source_label, 'path': str(path)})
+            continue
+
+        for line in _tail_lines(Path(path), per_file_limit):
+            entry = _parse_log_line(source_key, source_label, line)
+            if not entry:
+                continue
+            if selected_level != 'all' and entry['level'] != selected_level:
+                continue
+            if search_text and search_text not in entry['message'].lower():
+                continue
+            entries.append(entry)
+
+    entries.sort(key=lambda item: item['timestamp'], reverse=True)
+    return entries[:line_limit], missing_logs
 
 
 @login_required
@@ -202,6 +287,46 @@ def config_export(request):
 def data_management(request):
     """Render data management page"""
     return render(request, 'scale/data_management.html')
+
+
+@login_required
+@user_passes_test(is_admin)
+def log_viewer(request):
+    selected_log = request.GET.get('log', 'all')
+    if selected_log not in LOG_FILE_CHOICES:
+        selected_log = 'all'
+
+    selected_level = request.GET.get('level', 'all').upper()
+    if selected_level != 'ALL' and selected_level not in LOG_LEVELS:
+        selected_level = 'ALL'
+    selected_level = selected_level.lower() if selected_level == 'ALL' else selected_level
+
+    search_text = request.GET.get('q', '').strip()
+    line_limit = _coerce_line_limit(request.GET.get('lines'))
+    entries, missing_logs = _load_log_entries(
+        selected_log=selected_log,
+        selected_level=selected_level if selected_level != 'all' else 'all',
+        search_text=search_text,
+        line_limit=line_limit,
+    )
+
+    return render(
+        request,
+        'scale/log_viewer.html',
+        {
+            'entries': entries,
+            'missing_logs': missing_logs,
+            'selected_log': selected_log,
+            'selected_level': selected_level,
+            'search_text': search_text,
+            'line_limit': line_limit,
+            'log_options': [
+                {'value': key, 'label': label}
+                for key, (_, label) in LOG_FILE_CHOICES.items()
+            ],
+            'level_options': ['all', *LOG_LEVELS],
+        },
+    )
 
 
 @login_required
