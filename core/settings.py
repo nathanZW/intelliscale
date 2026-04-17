@@ -4,6 +4,8 @@ import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-7fpb0_o#!+k-nn%^mt@1s-zrk0u1d0c%y$0vbuo#s*bdh8h%68'
@@ -38,6 +40,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.RequestResponseLoggingMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -177,23 +180,91 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+        'standard': {
+            'format': '%(levelname)s %(asctime)s [%(name)s] %(message)s',
+        },
+        'requests': {
+            'format': '%(asctime)s %(levelname)s %(message)s',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'standard',
             'level': 'INFO',
+        },
+        'app_file': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'app.log'),
+            'when': 'midnight',
+            'backupCount': 14,
+            'formatter': 'standard',
+            'level': 'INFO',
+        },
+        'request_file': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'requests.log'),
+            'when': 'midnight',
+            'backupCount': 14,
+            'formatter': 'requests',
+            'level': 'INFO',
+        },
+        'api_file': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'api.log'),
+            'when': 'midnight',
+            'backupCount': 14,
+            'formatter': 'standard',
+            'level': 'INFO',
+        },
+        'db_file': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'database.log'),
+            'when': 'midnight',
+            'backupCount': 14,
+            'formatter': 'standard',
+            'level': 'WARNING',
         },
     },
     'loggers': {
-        'scale': {
-            'handlers': ['console'],
+        '': {
+            'handlers': ['console', 'app_file'],
+            'level': 'WARNING',
+        },
+        'core': {
+            'handlers': ['console', 'app_file'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
+        },
+        'scale': {
+            'handlers': ['console', 'app_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'users': {
+            'handlers': ['console', 'app_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'intelliscale.requests': {
+            'handlers': ['console', 'request_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'intelliscale.api': {
+            'handlers': ['console', 'api_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'intelliscale.db': {
+            'handlers': ['console', 'db_file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'app_file'],
+            'level': 'ERROR',
+            'propagate': False,
         },
     },
 }

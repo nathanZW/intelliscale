@@ -7,3 +7,6 @@ class ScaleConfig(AppConfig):
 
     def ready(self):
         import scale.signals
+        from core.instrumentation import install_runtime_instrumentation
+
+        install_runtime_instrumentation()
