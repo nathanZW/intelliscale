@@ -1,0 +1,103 @@
+{% extends "scale/base.html" %}
+
+{% block title %}System Logs | IntelliScale{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6">
+    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{% url 'scale:admin_dashboard' %}" class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 hover:text-zinc-900 hover:border-zinc-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                    </svg>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-bold text-zinc-900">System Logs</h1>
+                    <p class="text-sm text-zinc-600">Inspect request flow, outbound API traffic, and database failures without leaving the admin area.</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <a href="{% url 'scale:log_viewer' %}?log=database" class="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100">Database Issues</a>
+            <a href="{% url 'scale:log_viewer' %}?log=api" class="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">API Traffic</a>
+            <a href="{% url 'scale:log_viewer' %}?log=requests" class="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">Web Requests</a>
+        </div>
+    </div>
+
+    <div class="rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <form method="get" class="grid grid-cols-1 gap-4 p-5 md:grid-cols-4">
+            <div>
+                <label for="log" class="mb-2 block text-sm font-medium text-zinc-700">Log file</label>
+                <select id="log" name="log" class="block w-full rounded-md border-zinc-300 text-sm shadow-sm focus:border-zinc-500 focus:ring-zinc-500">
+                    {% for option in log_options %}
+                        <option value="{{ option.value }}"{% if selected_log == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="level" class="mb-2 block text-sm font-medium text-zinc-700">Level</label>
+                <select id="level" name="level" class="block w-full rounded-md border-zinc-300 text-sm shadow-sm focus:border-zinc-500 focus:ring-zinc-500">
+                    {% for option in level_options %}
+                        <option value="{{ option }}"{% if selected_level == option %} selected{% endif %}>{{ option|upper }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="lines" class="mb-2 block text-sm font-medium text-zinc-700">Lines to show</label>
+                <input id="lines" name="lines" type="number" min="50" max="1000" value="{{ line_limit }}" class="block w-full rounded-md border-zinc-300 text-sm shadow-sm focus:border-zinc-500 focus:ring-zinc-500">
+            </div>
+            <div>
+                <label for="q" class="mb-2 block text-sm font-medium text-zinc-700">Search</label>
+                <input id="q" name="q" type="search" value="{{ search_text }}" placeholder="request_id, locked, api_error..." class="block w-full rounded-md border-zinc-300 text-sm shadow-sm focus:border-zinc-500 focus:ring-zinc-500">
+            </div>
+            <div class="md:col-span-4 flex flex-wrap gap-3">
+                <button type="submit" class="inline-flex items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">Apply Filters</button>
+                <a href="{% url 'scale:log_viewer' %}" class="inline-flex items-center justify-center rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    {% if missing_logs %}
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <p class="font-medium">Some log files are not available yet.</p>
+            <ul class="mt-2 space-y-1">
+                {% for log in missing_logs %}
+                    <li>{{ log.label }}: <span class="font-mono">{{ log.path }}</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div class="border-b border-zinc-200 px-5 py-4">
+            <h2 class="text-lg font-semibold text-zinc-900">Filtered Results</h2>
+            <p class="mt-1 text-sm text-zinc-600">{{ entries|length }} log lines shown.</p>
+        </div>
+
+        {% if entries %}
+            <div class="divide-y divide-zinc-200">
+                {% for entry in entries %}
+                    <div class="p-4 md:p-5">
+                        <div class="mb-2 flex flex-wrap items-center gap-2 text-xs font-medium">
+                            <span class="rounded-full bg-zinc-100 px-2.5 py-1 text-zinc-700">{{ entry.source_label }}</span>
+                            <span class="rounded-full px-2.5 py-1 {% if entry.level == 'ERROR' or entry.level == 'CRITICAL' %}bg-red-100 text-red-700{% elif entry.level == 'WARNING' %}bg-amber-100 text-amber-700{% elif entry.level == 'INFO' %}bg-blue-100 text-blue-700{% else %}bg-zinc-100 text-zinc-700{% endif %}">
+                                {{ entry.level }}
+                            </span>
+                            {% if entry.timestamp %}
+                                <span class="text-zinc-500">{{ entry.timestamp }}</span>
+                            {% endif %}
+                        </div>
+                        <pre class="overflow-x-auto rounded-lg bg-zinc-950 p-4 text-xs leading-6 text-zinc-100">{{ entry.message }}</pre>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="p-8 text-center">
+                <h3 class="text-base font-semibold text-zinc-900">No log lines matched these filters.</h3>
+                <p class="mt-2 text-sm text-zinc-600">Try a wider log file selection, a broader level, or a shorter search term.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

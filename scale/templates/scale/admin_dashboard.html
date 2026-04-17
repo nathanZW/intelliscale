@@ -123,6 +123,17 @@
                 </a>
             </div>
         </div>
+
+        <!-- System Logs Card -->
+        <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
+            <div class="p-6">
+                <h2 class="text-xl font-semibold text-zinc-900 mb-2">System Logs</h2>
+                <p class="text-zinc-600 mb-8">Review web requests, API calls, and database issues from one place.</p>
+                <a href="{% url 'scale:log_viewer' %}" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 w-full">
+                    Open Logs
+                </a>
+            </div>
+        </div>
         
         <!-- Reports & Analytics Card - Placeholder for future expansion -->
         {% comment %} <div class="bg-white shadow rounded-lg overflow-hidden border border-zinc-200">
