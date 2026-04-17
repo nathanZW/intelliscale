@@ -101,6 +101,22 @@ def _load_log_entries(selected_log, selected_level, search_text, line_limit):
     return entries[:line_limit], missing_logs
 
 
+def _clear_selected_logs(selected_log):
+    cleared_files = []
+    missing_logs = []
+
+    for source_key, source_label, path in _iter_selected_logs(selected_log):
+        log_path = Path(path)
+        if not log_path.exists():
+            missing_logs.append({'source': source_key, 'label': source_label, 'path': str(log_path)})
+            continue
+
+        log_path.write_text('', encoding='utf-8')
+        cleared_files.append({'source': source_key, 'label': source_label, 'path': str(log_path)})
+
+    return cleared_files, missing_logs
+
+
 @login_required
 @user_passes_test(is_admin)
 def company_settings(request):
@@ -325,8 +341,50 @@ def log_viewer(request):
                 for key, (_, label) in LOG_FILE_CHOICES.items()
             ],
             'level_options': ['all', *LOG_LEVELS],
+            'selected_log_label': LOG_FILE_CHOICES[selected_log][1],
         },
     )
+
+
+@login_required
+@user_passes_test(is_admin)
+def clear_log_data(request):
+    """AJAX endpoint to clear selected log files with password verification."""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            password = data.get('password', '')
+            selected_log = data.get('log', 'all')
+
+            if not password:
+                return JsonResponse({'success': False, 'message': 'Password is required.'})
+
+            if not request.user.check_password(password):
+                return JsonResponse({'success': False, 'message': 'Incorrect password.'})
+
+            if selected_log not in LOG_FILE_CHOICES:
+                return JsonResponse({'success': False, 'message': 'Invalid log selection.'})
+
+            cleared_files, missing_logs = _clear_selected_logs(selected_log)
+            log_label = LOG_FILE_CHOICES[selected_log][1]
+
+            if cleared_files:
+                message = f'Cleared {len(cleared_files)} log file(s) for {log_label}.'
+                if missing_logs:
+                    message = f'{message} Some selected log files were not available.'
+                return JsonResponse({'success': True, 'message': message})
+
+            return JsonResponse({
+                'success': False,
+                'message': f'No log files were cleared for {log_label}.',
+            })
+
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'Invalid JSON data.'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': f'Error details: {str(e)}'})
+
+    return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=405)
 
 
 @login_required

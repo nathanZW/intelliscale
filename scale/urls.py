@@ -87,6 +87,7 @@ urlpatterns = [
     path('configuration/export/', views.config_export, name='config_export'),
     path('data-management/', views.data_management, name='data_management'),
     path('logs/', views.log_viewer, name='log_viewer'),
+    path('logs/clear/', views.clear_log_data, name='clear_log_data'),
     path('data-management/delete-delivery-notes/', views.delete_all_delivery_notes, name='delete_all_delivery_notes'),
     path('data-management/delete-weighing-records/', views.delete_all_weighing_records, name='delete_all_weighing_records'),
     
