@@ -592,7 +592,7 @@
         updateTareDisplay();
 
         // Get Weight Function
-        const WEIGHT_POLL_INTERVAL_MS = 500;
+        const WEIGHT_POLL_INTERVAL_MS = 300;
         let weightPollingTimeout = null;
         let weightPollingEnabled = false;
         let weightRequestInFlight = false;
@@ -644,12 +644,6 @@
         // Bind Get Weight Button
         getWeightBtn.addEventListener('click', getWeight);
 
-        function stopWeightPolling() {
-            weightPollingEnabled = false;
-            if (weightPollingTimeout) {
-                clearTimeout(weightPollingTimeout);
-                weightPollingTimeout = null;
-            }
         }
 
         function scheduleWeightPoll(delay = WEIGHT_POLL_INTERVAL_MS) {
