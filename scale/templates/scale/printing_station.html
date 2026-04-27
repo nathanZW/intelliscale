@@ -116,6 +116,7 @@
                     <!-- Net Weight as headline text -->
                     <div class="mt-8 mb-8 text-center">
                         <h3 id="main-weight-title" class="text-sm font-medium text-zinc-500 uppercase">Net Weight</h3>
+                        <div id="stable-weight-status" class="mt-2 inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">Waiting for Weight</div>
                         <div class="flex items-center justify-center mt-2">
                             <span id="net-weight-display" class="text-9xl font-bold text-zinc-900">0.00</span>
                             <span id="unit-display-net" class="ml-2 text-xl text-zinc-500">kg</span>
@@ -503,6 +504,7 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+{% include "scale/includes/stable_weight_tracker.html" %}
 <script src="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"></script>
 <script>
     console.log('Printing Station Script loaded');
@@ -522,6 +524,14 @@
         const tareWeightInput = document.getElementById('tare-weight');
         const netWeightInput = document.getElementById('net-weight');
         const netWeightDisplay = document.getElementById('net-weight-display');
+        const stableWeightGate = window.createStableWeightGate({
+            requiredCount: 4,
+            precision: 2,
+            manualAllowed: !grossWeightInput.hasAttribute('readonly'),
+            statusSelector: '#stable-weight-status',
+            weightDisplaySelectors: ['#net-weight-display', '#live-weight-display'],
+            actionSelectors: ['#save-btn']
+        });
 
         // Restore last scale
         if (localStorage.getItem('lastScaleId')) {
@@ -534,6 +544,7 @@
         scaleSelect.addEventListener('change', function() {
             scaleInfo.classList.toggle('hidden', !this.value);
             updateScaleInfo(this.value);
+            stableWeightGate.reset();
         });
 
         // Connect Scale Button
@@ -599,7 +610,10 @@
 
         function getWeight() {
             const scaleId = $(scaleSelect).val();
-            if (!scaleId) return;
+            if (!scaleId) {
+                stableWeightGate.markError();
+                return;
+            }
 
             if (weightRequestInFlight) return;
 
@@ -626,11 +640,17 @@
                         
                         netWeightDisplay.textContent = net.toFixed(2);
                         netWeightInput.value = net.toFixed(2);
+                        stableWeightGate.record(netWeightInput.value);
                         
                         // Update header values if they exist
                         const headerNetValue = document.getElementById('header-net-value');
                         if (headerNetValue) headerNetValue.textContent = net.toFixed(2);
+                    } else {
+                        stableWeightGate.markError();
                     }
+                },
+                error: function() {
+                    stableWeightGate.markError();
                 },
                 complete: function() {
                     weightRequestInFlight = false;
@@ -644,6 +664,12 @@
         // Bind Get Weight Button
         getWeightBtn.addEventListener('click', getWeight);
 
+        function stopWeightPolling() {
+            weightPollingEnabled = false;
+            if (weightPollingTimeout) {
+                clearTimeout(weightPollingTimeout);
+                weightPollingTimeout = null;
+            }
         }
 
         function scheduleWeightPoll(delay = WEIGHT_POLL_INTERVAL_MS) {
@@ -763,6 +789,11 @@
             $('#net-weight').val('');
             $('#net-weight-display').text('0.00');
             $('#moisture').val('');
+            stableWeightGate.reset();
+        });
+        
+        $('#printing-form').on('submit', function(e) {
+            stableWeightGate.guard(e);
         });
         
         // Prevent enter submit on barcode

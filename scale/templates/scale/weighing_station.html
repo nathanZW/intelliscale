@@ -117,6 +117,7 @@
                     <!-- Net Weight as headline text -->
                     <div class="mt-8 mb-8 text-center">
                         <h3 id="main-weight-title" class="text-sm font-medium text-zinc-500 uppercase">Net Weight</h3>
+                        <div id="stable-weight-status" class="mt-2 inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">Waiting for Weight</div>
                         <div class="flex items-center justify-center mt-2">
                             <span id="net-weight-display" class="text-9xl font-bold text-zinc-900">0.00</span>
                             <span id="unit-display-net" class="ml-2 text-xl text-zinc-500">kg</span>
@@ -515,6 +516,7 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+{% include "scale/includes/stable_weight_tracker.html" %}
 <script src="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"></script>
 <script>
     console.log('Script loaded - outside DOM content loaded');
@@ -964,12 +966,21 @@
         const netWeightInput = document.getElementById('net-weight');
         const netWeightDisplay = document.getElementById('net-weight-display');
         
-        tareWeightInput.addEventListener('input', calculateNetWeight);
-        grossWeightInput.addEventListener('input', calculateNetWeight);
-        
         // Global constant for weight rounding, safely defaulted to 0
         const WEIGHT_ROUNDING = {% if processes %}{{ processes.0.weight_rounding|default:0 }}{% else %}0{% endif %};
         console.log('Global Weight Rounding: ', WEIGHT_ROUNDING);
+        const isManualWeightEntry = !grossWeightInput.hasAttribute('readonly');
+        const stableWeightGate = window.createStableWeightGate({
+            requiredCount: 4,
+            precision: WEIGHT_ROUNDING,
+            manualAllowed: isManualWeightEntry,
+            statusSelector: '#stable-weight-status',
+            weightDisplaySelectors: ['#net-weight-display', '#live-weight-display'],
+            actionSelectors: ['#save-btn', '#save-print-btn']
+        });
+        
+        tareWeightInput.addEventListener('input', calculateNetWeight);
+        grossWeightInput.addEventListener('input', calculateNetWeight);
         
         // Get product tare weights from the template context
         const productTareWeights = {{ product_tare_weights|safe }};
@@ -1544,6 +1555,7 @@
             
             if (!scaleId) {
                 console.log('Please select a scale first');
+                stableWeightGate.markError();
                 return;
             }
 
@@ -1565,10 +1577,12 @@
                         callback(data.weight);
                     } else {
                         console.log('Failed to get weight: ' + data.message);
+                        stableWeightGate.markError();
                     }
                 },
                 error: function(xhr, status, error) {
                     console.log('Error getting weight: ' + error);
+                    stableWeightGate.markError();
                 },
                 complete: function() {
                     weightRequestInFlight = false;
@@ -1585,6 +1599,7 @@
                 getWeightFromScale(function(weight) {
                     currentLiveWeight = weight;
                     document.getElementById('live-weight-display').textContent = weight.toFixed(2);
+                    stableWeightGate.record(currentLiveWeight);
                 });
             }
         }
@@ -1601,6 +1616,7 @@
                 const headerNetValue = document.getElementById('header-net-value');
                 if (headerNetValue) headerNetValue.textContent = currentLiveWeight.toFixed(2);
                 calculateNetWeight();
+                stableWeightGate.record(netWeightInput.value);
             } else {
                 // For other processes, get fresh weight
                 getWeightFromScale(function(weight) {
@@ -1609,6 +1625,7 @@
                     const headerNetValue = document.getElementById('header-net-value');
                     if (headerNetValue) headerNetValue.textContent = weight.toFixed(2);
                     calculateNetWeight();
+                    stableWeightGate.record(netWeightInput.value);
                 });
             }
         }
@@ -1657,6 +1674,7 @@
 
         // Start polling when scale is selected
         $('#scale-select').change(function() {
+            stableWeightGate.reset();
             if ($(this).val()) {
                 startWeightPolling();
             } else {
@@ -1706,6 +1724,7 @@
             // - Scale selection (scaleSelect)
             // - Product selection (productSelect)
             // - Process selection (processSelect)
+            stableWeightGate.reset();
         }
         
         // Function to reset ALL form fields completely
@@ -1729,6 +1748,7 @@
             // productDetails.classList.add('hidden');
             processSelect.selectedIndex = 0;
             customFieldsContainer.classList.add('hidden');
+            stableWeightGate.reset();
             
             // Reset current process display
             document.getElementById('current-process-display').textContent = 'None selected';
@@ -1758,13 +1778,18 @@
         // Form validation before submission
         document.getElementById('weighing-form').addEventListener('submit', function(event) {
             const scaleId = scaleSelect.value;
-            // const productId = productSelect.value;
+            const productId = document.getElementById('product-id-input')?.value || document.getElementById('delivery-note-product-id')?.value || '';
             const processId = processSelect.value || (document.getElementById('process-id-input') ? document.getElementById('process-id-input').value : '');
             const grossWeight = grossWeightInput.value;
             const tareWeight = tareWeightInput.value;
             const netWeight = netWeightInput.value;
             
-            if (!scaleId) {
+            if (!stableWeightGate.canSubmit()) {
+                stableWeightGate.guard(event);
+                return;
+            }
+            
+            if (!scaleId && !isManualWeightEntry) {
                 alert('Please select a scale');
                 event.preventDefault();
                 return;
@@ -1896,6 +1921,9 @@
         const savePrintBtn = document.getElementById('save-print-btn');
         
         savePrintBtn.addEventListener('click', function() {
+            if (!stableWeightGate.guard()) {
+                return;
+            }
             // Add a hidden input to indicate that we want to print after saving
             const printInput = document.createElement('input');
             printInput.type = 'hidden';
@@ -1907,7 +1935,15 @@
             calculateNetWeight();
             
             // Submit the form
-            document.getElementById('weighing-form').submit();
+            const weighingForm = document.getElementById('weighing-form');
+            if (weighingForm.requestSubmit) {
+                weighingForm.requestSubmit();
+            } else {
+                const submitEvent = new Event('submit', { cancelable: true });
+                if (weighingForm.dispatchEvent(submitEvent)) {
+                    weighingForm.submit();
+                }
+            }
         });
         
         // On page load, check if we're returning after a form submission
@@ -1989,7 +2025,11 @@
                 const processId = document.getElementById('process-select')?.value || document.getElementById('process-id-input')?.value;
                 if (processId && processAutoSaveConfig && processAutoSaveConfig[processId]) {
                     console.log("Auto-save enabled for process ID " + processId + ". Triggering save...");
-                    document.getElementById('save-btn').click();
+                    if (stableWeightGate.canSubmit()) {
+                        document.getElementById('save-btn').click();
+                    } else {
+                        stableWeightGate.guard(e);
+                    }
                 }
 
                 processBarcodeInput(barcodeValue);
@@ -2310,6 +2350,7 @@
                             updateDeliveryNoteVisibility();
                             updateBarcodeRequirement();
                         }
+                        stableWeightGate.reset();
 
                         // Update current process allow spaces in barcode setting
                         const processId = this.value;
