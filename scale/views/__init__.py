@@ -14,6 +14,7 @@ from .scale import (
     get_weight,
     get_current_weight_api,
 )
+from .weight_stream import stream_weight
 
 # Weighing process views
 from .weighing_process import (

@@ -1,8 +1,11 @@
 """
 Satellite Service for IntelliScale.
-Runs as a standalone process (management command) that continuously polls 
+Runs as a standalone process (management command) that continuously polls
 active scales for weight and writes the results to a JSON cache file.
 Gunicorn workers read from this cache file — no SQLite contention, which necessated the revert.
+
+Each cache write is also published to a Redis pub/sub channel so SSE views can
+push updates to the browser without re-polling.
 """
 import json
 import os
@@ -11,6 +14,8 @@ import time
 import serial
 import serial.tools.list_ports
 import logging
+import redis
+from django.conf import settings as django_settings
 from scale.scale_utils import (
     get_scale_protocol,
     open_serial_for_scale,
@@ -24,6 +29,41 @@ logger = logging.getLogger(__name__)
 CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.satellite_cache.json')
 PERSISTENT_SERIAL_READERS = {}
 SERIAL_RECOVERY_DELAY_SECONDS = 0.5
+
+# Redis pub/sub: one channel per scale_id (or pk fallback). Subscribers in the
+# SSE view receive the same payload that's written to the cache file.
+SCALE_CHANNEL_PREFIX = 'scale:'
+_redis_client = None
+
+
+def _get_redis_client():
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    url = getattr(django_settings, 'CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    try:
+        _redis_client = redis.Redis.from_url(url, decode_responses=True)
+        _redis_client.ping()
+    except redis.RedisError as exc:
+        logger.warning(f"Redis unavailable for satellite pub/sub: {exc}")
+        _redis_client = None
+    return _redis_client
+
+
+def channel_for_scale_key(cache_key):
+    return f"{SCALE_CHANNEL_PREFIX}{cache_key}"
+
+
+def _publish_entry(cache_key, entry):
+    client = _get_redis_client()
+    if client is None:
+        return
+    try:
+        payload = dict(entry)
+        payload['cache_key'] = cache_key
+        client.publish(channel_for_scale_key(cache_key), json.dumps(payload))
+    except redis.RedisError as exc:
+        logger.debug(f"Redis publish failed for {cache_key}: {exc}")
 
 
 def read_cached_weights():
@@ -83,6 +123,7 @@ def _mark_scale_cache_status(cached, scale, status, error=None):
         entry['last_error'] = error
     else:
         entry.pop('last_error', None)
+    _publish_entry(_cache_key_for_scale(scale), entry)
 
 
 def _cache_successful_weight(cached, scale, weight, unit):
@@ -95,6 +136,7 @@ def _cache_successful_weight(cached, scale, weight, unit):
         'last_attempt': time.time(),
     })
     entry.pop('last_error', None)
+    _publish_entry(_cache_key_for_scale(scale), entry)
     return entry
 
 

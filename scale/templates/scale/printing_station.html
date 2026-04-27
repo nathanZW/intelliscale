@@ -602,120 +602,102 @@
         // Initialize tare display immediately
         updateTareDisplay();
 
-        // Get Weight Function
-        const WEIGHT_POLL_INTERVAL_MS = 300;
-        let weightPollingTimeout = null;
-        let weightPollingEnabled = false;
-        let weightRequestInFlight = false;
+        // Live weight stream (Server-Sent Events from satellite)
+        let weightStream = null;
 
+        function applyGrossWeight(weight) {
+            if (typeof weight !== 'number' || isNaN(weight)) return;
+            document.getElementById('live-weight-display').textContent = weight.toFixed(2);
+            grossWeightInput.value = weight.toFixed(2);
+
+            const productTare = updateTareDisplay();
+            const net = weight - productTare;
+            netWeightDisplay.textContent = net.toFixed(2);
+            netWeightInput.value = net.toFixed(2);
+            stableWeightGate.record(netWeightInput.value);
+
+            const headerNetValue = document.getElementById('header-net-value');
+            if (headerNetValue) headerNetValue.textContent = net.toFixed(2);
+        }
+
+        function handleStreamPayload(payload) {
+            if (!payload) return;
+            if (payload.status && payload.status !== 'ok') {
+                stableWeightGate.markError();
+                return;
+            }
+            if (typeof payload.weight !== 'number') return;
+            applyGrossWeight(payload.weight);
+        }
+
+        function stopWeightStream() {
+            if (weightStream) {
+                weightStream.close();
+                weightStream = null;
+            }
+        }
+
+        function startWeightStream() {
+            stopWeightStream();
+            const scaleId = $(scaleSelect).val();
+            if (!scaleId) return;
+
+            const url = "{% url 'scale:stream_weight' 0 %}".replace('0', scaleId);
+            weightStream = new EventSource(url);
+            weightStream.addEventListener('weight', function(event) {
+                try {
+                    handleStreamPayload(JSON.parse(event.data));
+                } catch (e) {
+                    console.warn('Bad SSE payload', e);
+                }
+            });
+            weightStream.addEventListener('error', function() {
+                stableWeightGate.markError();
+            });
+        }
+
+        // "Get Weight" button → force-fresh sample (waits for next satellite reading)
         function getWeight() {
             const scaleId = $(scaleSelect).val();
             if (!scaleId) {
                 stableWeightGate.markError();
                 return;
             }
-
-            if (weightRequestInFlight) return;
-
-            weightRequestInFlight = true;
-
             $.ajax({
                 url: "{% url 'scale:get_weight' 0 %}".replace('0', scaleId),
                 type: 'POST',
                 headers: { 'X-CSRFToken': '{{ csrf_token }}' },
                 success: function(data) {
-                    if (data.success) {
-                        const weight = data.weight;
-                        
-                        // Update UI
-                        document.getElementById('live-weight-display').textContent = weight.toFixed(2);
-                        grossWeightInput.value = weight.toFixed(2);
-                        
-                        // Calculate Net
-                        // Get tare weight (using helper or direct lookup)
-                        const productTare = updateTareDisplay();
-                        
-                        // Calculate net
-                        const net = weight - productTare;
-                        
-                        netWeightDisplay.textContent = net.toFixed(2);
-                        netWeightInput.value = net.toFixed(2);
-                        stableWeightGate.record(netWeightInput.value);
-                        
-                        // Update header values if they exist
-                        const headerNetValue = document.getElementById('header-net-value');
-                        if (headerNetValue) headerNetValue.textContent = net.toFixed(2);
+                    if (data.success && typeof data.weight === 'number') {
+                        applyGrossWeight(data.gross_weight ?? data.weight);
                     } else {
                         stableWeightGate.markError();
                     }
                 },
                 error: function() {
                     stableWeightGate.markError();
-                },
-                complete: function() {
-                    weightRequestInFlight = false;
-                    if (weightPollingEnabled) {
-                        scheduleWeightPoll();
-                    }
                 }
             });
         }
 
-        // Bind Get Weight Button
         getWeightBtn.addEventListener('click', getWeight);
-
-        function stopWeightPolling() {
-            weightPollingEnabled = false;
-            if (weightPollingTimeout) {
-                clearTimeout(weightPollingTimeout);
-                weightPollingTimeout = null;
-            }
-        }
-
-        function scheduleWeightPoll(delay = WEIGHT_POLL_INTERVAL_MS) {
-            if (!weightPollingEnabled) return;
-
-            if (weightPollingTimeout) {
-                clearTimeout(weightPollingTimeout);
-            }
-
-            weightPollingTimeout = setTimeout(function() {
-                weightPollingTimeout = null;
-
-                if (!$(scaleSelect).val()) {
-                    return;
-                }
-
-                if (weightRequestInFlight) {
-                    scheduleWeightPoll(100);
-                    return;
-                }
-
-                getWeight();
-            }, delay);
-        }
-
-        function startWeightPolling() {
-            weightPollingEnabled = true;
-            scheduleWeightPoll();
-        }
 
         $(scaleSelect).on('change', function() {
             if ($(this).val()) {
-                startWeightPolling();
+                startWeightStream();
             } else {
-                stopWeightPolling();
+                stopWeightStream();
             }
         });
 
         $(window).on('load', function() {
             if ($(scaleSelect).val()) {
-                startWeightPolling();
+                startWeightStream();
             }
         });
 
         $(window).on('beforeunload', function() {
-            stopWeightPolling();
+            stopWeightStream();
         });
 
 

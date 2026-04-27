@@ -79,6 +79,7 @@ urlpatterns = [
     path('printing-station/lookup-grower/', views.lookup_grower, name='lookup_grower'),
     path('weighing-station/recall-update-bale/', views.recall_and_update_bale, name='recall_and_update_bale'),
     path('scales/<int:scale_id>/get-weight/', views.get_weight, name='get_weight'),
+    path('scales/<int:scale_id>/stream/', views.stream_weight, name='stream_weight'),
     path('weighing-records/sync-all-unsynced/', views.sync_all_unsynced, name='sync_all_unsynced'),
     path('api/scales/<str:scale_id>/weight/', views.get_current_weight_api, name='get_current_weight_api'),
     

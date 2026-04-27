@@ -2,6 +2,14 @@
 Scale management views for IntelliScale.
 Handles scale CRUD, connection, and weight reading.
 """
+import json
+import logging
+import re
+import time
+import serial
+import serial.tools.list_ports
+import redis
+from django.conf import settings as django_settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
@@ -11,65 +19,97 @@ from django.utils import timezone
 from users.views import is_admin
 from ..models import Scale, ScaleIdHistory
 from ..forms import ScaleForm
-import serial
-import serial.tools.list_ports
-import re
-import time
+from ..satellite_service import (
+    channel_for_scale_key,
+    get_cached_weight_by_scale_id,
+)
 from ..scale_utils import (
     open_serial_for_scale,
-    parse_weight_from_bytes,
-    read_weight_bytes_for_scale,
     uses_cas_stream_protocol,
     uses_mettler_protocol,
 )
 
+logger = logging.getLogger(__name__)
 
-def _get_satellite_cached_weight(scale, tare_weight=0):
-    from ..models import CompanySettings
-    from ..satellite_service import get_cached_weight_by_scale_id
+FRESH_WEIGHT_TIMEOUT_SECONDS = 1.5
 
-    settings = CompanySettings.objects.first()
-    if not settings or not settings.satellite:
+
+def _cache_key_for(scale):
+    return str(scale.scale_id) if scale.scale_id else str(scale.pk)
+
+
+def _wait_for_fresh_sample(scale, timeout=FRESH_WEIGHT_TIMEOUT_SECONDS):
+    """Block until the satellite publishes the next reading for this scale.
+
+    Returns the payload dict, or None if Redis is unreachable / no message
+    arrives in time.
+    """
+    cache_key = _cache_key_for(scale)
+    redis_url = getattr(django_settings, 'CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    pubsub = None
+    try:
+        client = redis.Redis.from_url(redis_url, decode_responses=True)
+        pubsub = client.pubsub(ignore_subscribe_messages=True)
+        pubsub.subscribe(channel_for_scale_key(cache_key))
+    except redis.RedisError as exc:
+        logger.warning(f"get_weight could not subscribe to Redis: {exc}")
         return None
 
-    cache_key = str(scale.scale_id) if scale.scale_id else str(scale.pk)
-    cached = get_cached_weight_by_scale_id(cache_key)
-    if not cached:
+    deadline = time.monotonic() + timeout
+    try:
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            message = pubsub.get_message(timeout=min(remaining, 0.5))
+            if message and message.get('type') == 'message':
+                try:
+                    return json.loads(message['data'])
+                except (ValueError, TypeError):
+                    continue
+        return None
+    finally:
+        try:
+            pubsub.close()
+        except Exception:
+            pass
+
+
+def _payload_to_response(scale, payload, tare_weight=0):
+    """Translate a satellite cache/pubsub payload into the JSON shape expected
+    by the existing weight endpoints.
+    """
+    if not payload:
         return JsonResponse({
             'success': False,
             'message': (
-                f'No cached weight available for {scale.name}. '
+                f'No weight available for {scale.name}. '
                 'Ensure the satellite service is running (python manage.py run_satellite).'
             )
         })
 
-    if 'weight' not in cached or 'timestamp' not in cached:
+    if 'weight' not in payload or 'timestamp' not in payload:
         return JsonResponse({
             'success': False,
-            'message': cached.get('last_error') or f'{scale.name} has not produced a valid cached weight yet.',
-            'source': 'satellite_cache',
-            'status': cached.get('status', 'unknown'),
-            'last_attempt': cached.get('last_attempt'),
-            'last_error': cached.get('last_error'),
+            'message': payload.get('last_error') or f'{scale.name} has not produced a valid weight yet.',
+            'source': 'satellite',
+            'status': payload.get('status', 'unknown'),
+            'last_attempt': payload.get('last_attempt'),
+            'last_error': payload.get('last_error'),
         })
 
-    gross_weight = cached['weight']
-    net_weight = gross_weight - tare_weight
+    gross_weight = payload['weight']
     response = {
         'success': True,
-        'weight': net_weight,
+        'weight': gross_weight - tare_weight if tare_weight else gross_weight,
         'gross_weight': gross_weight,
-        'unit': cached.get('unit', 'kg'),
-        'scale_id': cached.get('scale_id'),
-        'scale_name': cached.get('scale_name'),
-        'source': 'satellite_cache',
-        'cache_age_seconds': round(time.time() - cached['timestamp'], 2),
-        'status': cached.get('status', 'ok'),
-        'last_attempt': cached.get('last_attempt', cached['timestamp']),
-        'last_error': cached.get('last_error'),
+        'unit': payload.get('unit', 'kg'),
+        'scale_id': payload.get('scale_id'),
+        'scale_name': payload.get('scale_name'),
+        'source': 'satellite',
+        'cache_age_seconds': round(time.time() - payload['timestamp'], 2),
+        'status': payload.get('status', 'ok'),
+        'last_attempt': payload.get('last_attempt', payload['timestamp']),
+        'last_error': payload.get('last_error'),
     }
-    if tare_weight == 0:
-        response['weight'] = gross_weight
     return JsonResponse(response)
 
 
@@ -320,92 +360,34 @@ def _connect_scale_passive(scale):
     return False, f"Could not connect to scale {scale.name}. No suitable COM port found or scale not responsive."
 
 
-def _serial_timeout_for_scale(scale):
-    if uses_mettler_protocol(scale) or uses_cas_stream_protocol(scale):
-        return scale.timeout or 1
-    return scale.timeout or 2
-
-
-def _read_scale_weight(scale):
-    ser = None
-    try:
-        ser = open_serial_for_scale(scale, timeout=_serial_timeout_for_scale(scale))
-        if not ser.is_open:
-            return None, None, None, 'Scale serial port is not open'
-
-        line = read_weight_bytes_for_scale(scale, ser, prefer_low_latency=True)
-        if not line:
-            return None, None, None, 'Scale connected but returned no data. Check connection and scale settings.'
-
-        weight, raw_str = parse_weight_from_bytes(line)
-        if weight is None:
-            return None, raw_str, line, f'No numeric weight found in: {raw_str}'
-
-        unit_match = re.search(r'(kg|g|lbs|lb|pd)\b', raw_str, re.IGNORECASE)
-        unit = unit_match.group(1).lower() if unit_match else 'kg'
-        return weight, raw_str, line, unit
-    finally:
-        if ser and ser.is_open:
-            ser.close()
-
-
 @login_required
 def get_weight(request, scale_id):
-    if request.method == 'POST':
-        try:
-            scale = get_object_or_404(Scale, pk=scale_id)
-            satellite_response = _get_satellite_cached_weight(scale)
-            if satellite_response is not None:
-                return satellite_response
-            
-            # Check if scale is connected
-            if scale.last_connection_status != "connected":
-                return JsonResponse({
-                    'success': False,
-                })
-            
-            # Try to read from the scale
-            try:
-                weight, detail, raw_bytes, result = _read_scale_weight(scale)
-                if weight is None:
-                    if raw_bytes is not None:
-                        raw_preview = repr(raw_bytes[:60]) + ('...' if len(raw_bytes) > 60 else '')
-                        print(f"Scale {scale.name}: weight=None raw={raw_preview}")
-                    else:
-                        print(f"Scale {scale.name}: {result}")
-                    return JsonResponse({
-                        'success': False,
-                        'message': result
-                    })
+    """Force a fresh weight reading by waiting for the next satellite sample.
 
-                raw_preview = repr(raw_bytes[:60]) + ('...' if len(raw_bytes) > 60 else '')
-                print(f"Scale {scale.name}: weight={weight} raw={raw_preview}")
-                return JsonResponse({
-                    'success': True,
-                    'weight': weight
-                })
-            except serial.SerialException as e:
-                print(f"SerialException for scale {scale.name}: {str(e)}")
-                return JsonResponse({
-                    'success': False,
-                    'message': f'Error reading from scale: {str(e)}'
-                })
-                    
-        except Exception as e:
-            print(f"General exception in get_weight for scale {scale_id}: {str(e)}")
-            return JsonResponse({
-                'success': False,
-                'message': str(e)
-            })
-    
-    return JsonResponse({
-        'success': False,
-        'message': 'Only POST requests are allowed.'
-    })
+    This blocks the request until the satellite publishes a new pub/sub message
+    for this scale (up to FRESH_WEIGHT_TIMEOUT_SECONDS). Falls back to the
+    cached snapshot if Redis is unreachable.
+    """
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'message': 'Only POST requests are allowed.'
+        })
+
+    try:
+        scale = get_object_or_404(Scale, pk=scale_id)
+        payload = _wait_for_fresh_sample(scale)
+        if payload is None:
+            payload = get_cached_weight_by_scale_id(_cache_key_for(scale))
+        return _payload_to_response(scale, payload)
+    except Exception as e:
+        logger.exception(f"get_weight error for scale {scale_id}: {e}")
+        return JsonResponse({'success': False, 'message': str(e)})
 
 
 @csrf_exempt
 def get_current_weight_api(request, scale_id):
+    """External API endpoint — returns the cached snapshot (no force-fresh)."""
     try:
         try:
             scale = Scale.objects.get(scale_id=str(scale_id))
@@ -414,51 +396,15 @@ def get_current_weight_api(request, scale_id):
                 'success': False,
                 'message': f'Scale not found with scale_id: {scale_id}'
             }, status=404)
-        
-        # Get tare weight from active product (if one exists)
+
         from ..models import Product
-        
         tare_weight = 0
         active_product = Product.objects.filter(is_active=True).first()
         if active_product and active_product.tare_weight:
             tare_weight = float(active_product.tare_weight)
-        
-        satellite_response = _get_satellite_cached_weight(scale, tare_weight=tare_weight)
-        if satellite_response is not None:
-            return satellite_response
-        
-        # Fallback: direct serial read (original behaviour when satellite is off)
-        if not scale.com_port:
-            return JsonResponse({
-                'success': False,
-                'message': f'Scale {scale.name} does not have a COM port configured'
-            }, status=400)
-        
-        try:
-            weight, detail, raw_bytes, result = _read_scale_weight(scale)
-            if weight is None:
-                return JsonResponse({
-                    'success': False,
-                    'message': result
-                })
 
-            net_weight = weight - tare_weight
-            return JsonResponse({
-                'success': True,
-                'weight': net_weight,
-                'gross_weight': weight,
-                'unit': result,
-                'scale_id': str(scale.scale_id) if scale.scale_id else None,
-                'scale_name': scale.name
-            })
-        except serial.SerialException as e:
-            return JsonResponse({
-                'success': False,
-                'message': f'Error reading from scale: {str(e)}'
-            })
-                
+        payload = get_cached_weight_by_scale_id(_cache_key_for(scale))
+        return _payload_to_response(scale, payload, tare_weight=tare_weight)
     except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'message': str(e)
-        })
+        logger.exception(f"get_current_weight_api error for scale {scale_id}: {e}")
+        return JsonResponse({'success': False, 'message': str(e)})

@@ -1539,161 +1539,120 @@
             }
         }
         
-        // Get Weight button functionality
+        // Live weight stream (Server-Sent Events from satellite)
         const getWeightBtn = document.getElementById('get-weight-btn');
-        const WEIGHT_POLL_INTERVAL_MS = 300;
-        let weightPollingTimeout = null;
-        let weightPollingEnabled = false;
-        let weightRequestInFlight = false;
+        let weightStream = null;
         let currentLiveWeight = 0;
 
-        function getWeightFromScale(callback) {
-            console.log('getWeightFromScale... (TESTING)');
-            // callback(45);
-            // return;
-            const scaleId = $('#scale-select').val();
-            
-            if (!scaleId) {
-                console.log('Please select a scale first');
+        function applyLiveWeight(weight) {
+            if (typeof weight !== 'number' || isNaN(weight)) return;
+            currentLiveWeight = weight;
+            document.getElementById('live-weight-display').textContent = weight.toFixed(2);
+
+            if (processType === 'WeighBridge') {
+                stableWeightGate.record(currentLiveWeight);
+            } else {
+                $('#gross-weight').val(weight.toFixed(2));
+                document.getElementById('net-weight-display').textContent = weight.toFixed(2);
+                const headerNetValue = document.getElementById('header-net-value');
+                if (headerNetValue) headerNetValue.textContent = weight.toFixed(2);
+                calculateNetWeight();
+                stableWeightGate.record(netWeightInput.value);
+            }
+        }
+
+        function handleStreamPayload(payload) {
+            if (!payload) return;
+            if (payload.status && payload.status !== 'ok') {
                 stableWeightGate.markError();
                 return;
             }
-
-            if (weightRequestInFlight) {
-                return;
+            if (typeof payload.weight === 'number') {
+                applyLiveWeight(payload.weight);
             }
+        }
 
-            weightRequestInFlight = true;
-            
-            // Send request to get weight
-            $.ajax({
-                url: "{% url 'scale:get_weight' 0 %}".replace('0', scaleId),
-                type: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                success: function(data) {
-                    if (data.success) {
-                        callback(data.weight);
-                    } else {
-                        console.log('Failed to get weight: ' + data.message);
-                        stableWeightGate.markError();
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.log('Error getting weight: ' + error);
-                    stableWeightGate.markError();
-                },
-                complete: function() {
-                    weightRequestInFlight = false;
-                    if (weightPollingEnabled) {
-                        scheduleWeightPoll();
-                    }
+        function stopWeightStream() {
+            if (weightStream) {
+                weightStream.close();
+                weightStream = null;
+            }
+        }
+
+        function startWeightStream() {
+            stopWeightStream();
+            const scaleId = $('#scale-select').val();
+            if (!scaleId) return;
+
+            const url = "{% url 'scale:stream_weight' 0 %}".replace('0', scaleId);
+            weightStream = new EventSource(url);
+            weightStream.addEventListener('weight', function(event) {
+                try {
+                    handleStreamPayload(JSON.parse(event.data));
+                } catch (e) {
+                    console.warn('Bad SSE payload', e);
                 }
+            });
+            weightStream.addEventListener('error', function() {
+                stableWeightGate.markError();
             });
         }
 
-        // Live weight polling (for WeighBridge only)
-        function updateLiveWeight() {
-            if (processType === 'WeighBridge') {
-                getWeightFromScale(function(weight) {
-                    currentLiveWeight = weight;
-                    document.getElementById('live-weight-display').textContent = weight.toFixed(2);
-                    stableWeightGate.record(currentLiveWeight);
-                });
-            }
-        }
-
-        // Manual get weight (transfers live weight for WeighBridge, gets fresh weight for others)
+        // "Get Weight" button:
+        //   - WeighBridge: snapshot the current live weight into the form
+        //   - Other processes: force a fresh reading via the get_weight endpoint
         function getWeight() {
-            console.log('Getting weight...');
-            
             if (processType === 'WeighBridge') {
-                // For WeighBridge, use current live weight
                 $('#gross-weight').val(currentLiveWeight.toFixed(2));
                 document.getElementById('net-weight-display').textContent = currentLiveWeight.toFixed(2);
-                // Reflect in header net display
                 const headerNetValue = document.getElementById('header-net-value');
                 if (headerNetValue) headerNetValue.textContent = currentLiveWeight.toFixed(2);
                 calculateNetWeight();
                 stableWeightGate.record(netWeightInput.value);
-            } else {
-                // For other processes, get fresh weight
-                getWeightFromScale(function(weight) {
-                    $('#gross-weight').val(weight.toFixed(2));
-                    document.getElementById('net-weight-display').textContent = weight.toFixed(2);
-                    const headerNetValue = document.getElementById('header-net-value');
-                    if (headerNetValue) headerNetValue.textContent = weight.toFixed(2);
-                    calculateNetWeight();
-                    stableWeightGate.record(netWeightInput.value);
-                });
-            }
-        }
-
-        function stopWeightPolling() {
-            weightPollingEnabled = false;
-            if (weightPollingTimeout) {
-                clearTimeout(weightPollingTimeout);
-                weightPollingTimeout = null;
-            }
-        }
-
-        function scheduleWeightPoll(delay = WEIGHT_POLL_INTERVAL_MS) {
-            if (!weightPollingEnabled) {
                 return;
             }
 
-            if (weightPollingTimeout) {
-                clearTimeout(weightPollingTimeout);
+            const scaleId = $('#scale-select').val();
+            if (!scaleId) {
+                stableWeightGate.markError();
+                return;
             }
-
-            weightPollingTimeout = setTimeout(function() {
-                weightPollingTimeout = null;
-
-                if (!$('#scale-select').val()) {
-                    return;
+            $.ajax({
+                url: "{% url 'scale:get_weight' 0 %}".replace('0', scaleId),
+                type: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                success: function(data) {
+                    if (data.success && typeof data.weight === 'number') {
+                        applyLiveWeight(data.gross_weight ?? data.weight);
+                    } else {
+                        stableWeightGate.markError();
+                    }
+                },
+                error: function() {
+                    stableWeightGate.markError();
                 }
-
-                if (weightRequestInFlight) {
-                    scheduleWeightPoll(100);
-                    return;
-                }
-
-                if (processType === 'WeighBridge') {
-                    updateLiveWeight();
-                } else {
-                    getWeight();
-                }
-            }, delay);
+            });
         }
 
-        function startWeightPolling() {
-            weightPollingEnabled = true;
-            scheduleWeightPoll();
-        }
-
-        // Start polling when scale is selected
         $('#scale-select').change(function() {
             stableWeightGate.reset();
             if ($(this).val()) {
-                startWeightPolling();
+                startWeightStream();
             } else {
-                stopWeightPolling();
+                stopWeightStream();
             }
         });
 
         $(window).on('load', function() {
             if ($('#scale-select').val()) {
-                startWeightPolling();
+                startWeightStream();
             }
         });
 
-        // Stop polling when leaving the page
         $(window).on('beforeunload', function() {
-            stopWeightPolling();
+            stopWeightStream();
         });
 
-        // Manual get weight button still works
         getWeightBtn.addEventListener('click', getWeight);
 
         // Function to selectively clear form fields after saving
