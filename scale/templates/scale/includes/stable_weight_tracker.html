@@ -1,0 +1,135 @@
+<script>
+    window.createStableWeightGate = function(options) {
+        const requiredCount = options.requiredCount || 4;
+        const precision = Number.isInteger(options.precision) ? options.precision : 2;
+        const manualAllowed = Boolean(options.manualAllowed);
+        const statusEl = document.querySelector(options.statusSelector);
+        const displayEls = (options.weightDisplaySelectors || [])
+            .map(selector => document.querySelector(selector))
+            .filter(Boolean);
+        const actionEls = (options.actionSelectors || [])
+            .map(selector => document.querySelector(selector))
+            .filter(Boolean);
+        const inactiveText = manualAllowed ? 'Manual Entry' : 'Waiting for Weight';
+        const state = {
+            lastValue: null,
+            count: 0,
+            stable: false
+        };
+
+        function normalize(value) {
+            const numericValue = Number(value);
+            if (!Number.isFinite(numericValue)) {
+                return null;
+            }
+            return numericValue.toFixed(precision);
+        }
+
+        function setElementClasses(el, classNames, enabled) {
+            classNames.split(' ').forEach(className => {
+                if (className) {
+                    el.classList.toggle(className, enabled);
+                }
+            });
+        }
+
+        function setDisplaysStable(isStable) {
+            displayEls.forEach(el => {
+                setElementClasses(el, 'text-zinc-900 text-zinc-600', false);
+                setElementClasses(el, 'text-red-600', !isStable);
+                setElementClasses(el, 'text-green-600', isStable);
+            });
+        }
+
+        function setActionsVisible(visible) {
+            actionEls.forEach(el => {
+                el.disabled = !visible;
+                el.classList.toggle('hidden', !visible);
+                el.setAttribute('aria-disabled', visible ? 'false' : 'true');
+            });
+        }
+
+        function renderStatus(text, isStable) {
+            if (!statusEl) {
+                return;
+            }
+            statusEl.textContent = text;
+            statusEl.className = isStable
+                ? 'mt-2 inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800'
+                : 'mt-2 inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800';
+        }
+
+        function render() {
+            const canSave = manualAllowed || state.stable;
+            setDisplaysStable(state.stable);
+            setActionsVisible(canSave);
+
+            if (state.stable) {
+                renderStatus('Stable', true);
+            } else if (state.count > 0) {
+                renderStatus(`Stabilizing ${state.count}/${requiredCount}`, false);
+            } else {
+                renderStatus(inactiveText, manualAllowed);
+            }
+        }
+
+        function reset() {
+            state.lastValue = null;
+            state.count = 0;
+            state.stable = false;
+            render();
+        }
+
+        function record(value) {
+            const normalizedValue = normalize(value);
+            if (normalizedValue === null) {
+                reset();
+                return false;
+            }
+
+            if (normalizedValue === state.lastValue) {
+                state.count += 1;
+            } else {
+                state.lastValue = normalizedValue;
+                state.count = 1;
+            }
+
+            state.stable = state.count >= requiredCount;
+            render();
+            return state.stable;
+        }
+
+        function canSubmit() {
+            return manualAllowed || state.stable;
+        }
+
+        function guard(event) {
+            if (canSubmit()) {
+                return true;
+            }
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            render();
+            alert(`Please wait for ${requiredCount} identical weight readings before saving.`);
+            return false;
+        }
+
+        reset();
+
+        return {
+            record,
+            reset,
+            markError: reset,
+            canSubmit,
+            guard,
+            isStable: function() {
+                return state.stable;
+            },
+            getCount: function() {
+                return state.count;
+            }
+        };
+    };
+</script>
