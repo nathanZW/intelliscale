@@ -1681,7 +1681,7 @@
             stableWeightGate.reset();
         }
         
-        // Function to reset ALL form fields completely
+        // Function to reset ALL form values while keeping the active process form shape
         function clearAllFields() {
             // Reset all weight fields
             grossWeightInput.value = '';
@@ -1695,22 +1695,15 @@
             // Reset barcode field
             document.getElementById('barcode-input').value = '';
             
-            // Reset selections
+            // Reset scale selection
             scaleSelect.selectedIndex = 0;
             scaleInfo.classList.add('hidden');
-            // productSelect.selectedIndex = 0;
-            // productDetails.classList.add('hidden');
-            processSelect.selectedIndex = 0;
-            customFieldsContainer.classList.add('hidden');
             stableWeightGate.reset();
-            
-            // Reset current process display
-            document.getElementById('current-process-display').textContent = 'None selected';
-            
+
             // Reset delivery note selection
             deliveryNoteSelect.selectedIndex = 0;
             
-            // Clear custom fields
+            // Clear custom field values without removing the rendered fields.
             const customInputs = customFieldsContainer.querySelectorAll('input, select, textarea');
             customInputs.forEach(input => {
                 if (input.type === 'checkbox' || input.type === 'radio') {
@@ -1721,7 +1714,7 @@
             });
         }
         
-        // Clear Form button should reset everything
+        // Clear Form button should reset values while preserving the active process fields.
         const clearBtn = document.getElementById('clear-btn');
         if (clearBtn) {
             clearBtn.addEventListener('click', function() {
