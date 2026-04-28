@@ -1939,10 +1939,14 @@
                 // Clear only the fields that should be reset after saving
                 clearSelectedFields();
 
-                // Re-populate tare weight from the restored product *after* clearing,
-                // since clearSelectedFields blanks the tare input.
-                if (lastProductId) {
-                    updateTareWeightFromProduct(lastProductId);
+                // Re-populate tare weight from the active product *after* clearing,
+                // since clearSelectedFields blanks the tare input. Read the product id
+                // from the live input rather than localStorage (lastProductId is not
+                // persisted on submit, so we can't rely on it here).
+                const productIdInputForTare = document.getElementById('product-id-input')
+                    || document.getElementById('delivery-note-product-id');
+                if (productIdInputForTare && productIdInputForTare.value) {
+                    updateTareWeightFromProduct(productIdInputForTare.value);
                 }
             }
         });
