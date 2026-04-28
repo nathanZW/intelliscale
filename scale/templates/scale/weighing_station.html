@@ -1923,23 +1923,27 @@
                 }
                 
                 if (lastProductId) {
-                    // Update product selection and tare weight
+                    // Update product selection
                     const productIdInput = document.getElementById('product-id-input');
                     if (productIdInput) {
                         productIdInput.value = lastProductId;
                     }
-                    // Update tare weight from the restored product
-                    updateTareWeightFromProduct(lastProductId);
                 }
-                
+
                 if (lastProcessId) {
                     processSelect.value = lastProcessId;
                     // Trigger process change to load custom fields if needed
                     processSelect.dispatchEvent(new Event('change'));
                 }
-                
+
                 // Clear only the fields that should be reset after saving
                 clearSelectedFields();
+
+                // Re-populate tare weight from the restored product *after* clearing,
+                // since clearSelectedFields blanks the tare input.
+                if (lastProductId) {
+                    updateTareWeightFromProduct(lastProductId);
+                }
             }
         });
         
