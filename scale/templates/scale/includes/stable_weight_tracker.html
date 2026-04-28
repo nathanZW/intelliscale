@@ -3,6 +3,11 @@
         const requiredCount = options.requiredCount || 4;
         const precision = Number.isInteger(options.precision) ? options.precision : 2;
         const manualAllowed = Boolean(options.manualAllowed);
+        // Tolerate transient stream/serial hiccups: only reset the stable count
+        // after this many consecutive markError() calls without an intervening
+        // successful record(). Prevents a single dropped serial read from
+        // flashing "Waiting for Weight" mid-session.
+        const errorTolerance = Number.isInteger(options.errorTolerance) ? options.errorTolerance : 3;
         const statusEl = document.querySelector(options.statusSelector);
         const displayEls = (options.weightDisplaySelectors || [])
             .map(selector => document.querySelector(selector))
@@ -14,7 +19,8 @@
         const state = {
             lastValue: null,
             count: 0,
-            stable: false
+            stable: false,
+            errorStreak: 0
         };
 
         function normalize(value) {
@@ -77,6 +83,7 @@
             state.lastValue = null;
             state.count = 0;
             state.stable = false;
+            state.errorStreak = 0;
             render();
         }
 
@@ -86,6 +93,8 @@
                 reset();
                 return false;
             }
+
+            state.errorStreak = 0;
 
             if (normalizedValue === state.lastValue) {
                 state.count += 1;
@@ -97,6 +106,13 @@
             state.stable = state.count >= requiredCount;
             render();
             return state.stable;
+        }
+
+        function markError() {
+            state.errorStreak += 1;
+            if (state.errorStreak >= errorTolerance) {
+                reset();
+            }
         }
 
         function canSubmit() {
@@ -121,7 +137,7 @@
         return {
             record,
             reset,
-            markError: reset,
+            markError,
             canSubmit,
             guard,
             isStable: function() {
