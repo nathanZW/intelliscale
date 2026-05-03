@@ -334,7 +334,7 @@ def _handle_status_update_response(response, delivery_note):
         except ValueError:
             logger.info("Successfully updated Odoo status to 'laid' for delivery note %s (non-JSON response)", delivery_note.delivery_note_number)
             return True
-    elif response.status_code >= 400:
+    else:
         error_message = response.text
         try:
             response_json = response.json()
@@ -343,9 +343,6 @@ def _handle_status_update_response(response, delivery_note):
         except (ValueError, KeyError):
             pass
         logger.error('Failed to update Odoo status. Status: %s. Error: %s', response.status_code, error_message)
-        return False
-    else:
-        logger.error('Unexpected response from Odoo. Status: %s. Response: %s', response.status_code, response.text)
         return False
 
 def update_dnote_completion_status_with_api_key(delivery_note):
@@ -657,7 +654,7 @@ def _handle_external_api_response(response, success_action, delivery_note):
             pass
             
         return success_action()
-    elif response.status_code >= 400:
+    else:
         error_message = f"API Error {response.status_code}: {response.text}"
         try:
             response_json = response.json()
@@ -668,11 +665,6 @@ def _handle_external_api_response(response, success_action, delivery_note):
         except (ValueError, KeyError):
             pass
         return JsonResponse({'success': False, 'message': error_message})
-    else:
-        return JsonResponse({
-            'success': False,
-            'message': f'Unexpected response from Odoo. Status: {response.status_code}. Response: {response.text}'
-        })
 
 
 @login_required

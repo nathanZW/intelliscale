@@ -701,7 +701,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     if retry_count < 1:
                         return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note, retry_count=retry_count + 1)
                     return _log_sync_error(weighing_record_id, "ERP API call failed: Session expired and re-authentication failed")
-                elif response.status_code >= 400:
+                else:
                     error_message = response.text
                     try:
                         response_json = response.json()
@@ -717,8 +717,6 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     except (ValueError, KeyError):
                         pass
                     return _log_sync_error(weighing_record_id, f"create-commercial-bale failed with status {response.status_code}: {error_message}")
-                else:
-                    return _log_sync_error(weighing_record_id, f"create-commercial-bale returned unexpected status {response.status_code}: {response.text}")
                     
             except requests.exceptions.ConnectionError as e:
                 return _log_sync_error(weighing_record_id, f"Connection error calling create-commercial-bale: {str(e)}")
@@ -798,7 +796,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         if retry_count < 1:
                             return send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, custom_data, process_type, process_id, delivery_note, retry_count=retry_count + 1)
                         return _log_sync_error(weighing_record_id, "ERP API call failed: Session expired and re-authentication failed")
-                    elif response.status_code >= 400:
+                    else:
                         error_message = response.text
                         try:
                             response_json = response.json()
@@ -814,8 +812,6 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         except (ValueError, KeyError):
                             pass
                         return _log_sync_error(weighing_record_id, f"ERP API call failed with status {response.status_code}: {error_message}")
-                    else:
-                        return _log_sync_error(weighing_record_id, f"ERP API call returned unexpected status {response.status_code}: {response.text}")
                 except requests.exceptions.ConnectionError as e:
                     return _log_sync_error(weighing_record_id, f"Connection error during ERP API call: {str(e)}")
                 except requests.exceptions.Timeout as e:
