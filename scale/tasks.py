@@ -52,7 +52,13 @@ def sync_odoo_delivery_notes():
                 logger.error(error_message)
                 return f"API Error: {response.status_code}"
 
-            odoo_data = response.json()
+            try:
+                odoo_data = response.json()
+            except ValueError as e:
+                snippet = response.text[:200]
+                logger.error("Odoo API returned non-JSON response: %s. Body: %s", e, snippet)
+                return f"API returned non-JSON response: {snippet}"
+
             print(f"[SYNC TASK] API returned success={odoo_data.get('success')}. Found {len(odoo_data.get('data', []))} records.")
 
             if not odoo_data.get('success'):
