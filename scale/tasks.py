@@ -69,7 +69,7 @@ def sync_odoo_delivery_notes():
             error_count = 0
 
             # Process each delivery note
-            for item in odoo_data['data']:
+            for item in odoo_data.get('data', []):
                 try:
                     sync_single_delivery_note(item)
                     synced_count += 1
