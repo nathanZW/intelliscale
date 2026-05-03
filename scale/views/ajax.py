@@ -104,23 +104,18 @@ def recall_and_update_bale(request):
                 hessian_id = weighing_record.custom_data.get('hessian_id', '')
                 print(f"Recall and Update: Hessian ID: '{hessian_id}'")
         
-        # Build the API URL with required parameters like in send_to_erp (only scale_id and hessian_id)
         # Use the recall-bale endpoint instead of update-mass for complete 0 mass
-        base_url = f"{company_settings.api_url}/api/bales/recall-bale/?barcode={barcode}&scale_id={scale_id}"
+        api_url = f"{company_settings.api_url}/api/bales/recall-bale/"
+        params = {'barcode': barcode, 'scale_id': scale_id}
         if hessian_id:
-            api_url = f"{base_url}&hessian_id={hessian_id}"
-            print(f"Recall and Update: Using hessian in API URL: {api_url}")
-        else:
-            api_url = base_url
-            print(f"Recall and Update: Using base API URL (no hessian): {api_url}")
-        
-        # Using requests to communicate with the ERP to set mass to 0
-        print(f"Recall and Update: Making API request to: {api_url}")
+            params['hessian_id'] = hessian_id
+
+        print(f"Recall and Update: Making API request to: {api_url} with params: {params}")
         headers = {
             "User-Agent": "insomnia/11.5.0",
             "X-API-Key": api_key
         }
-        response = requests.post(api_url, headers=headers, timeout=10)
+        response = requests.post(api_url, headers=headers, params=params, timeout=10)
         print(f"Recall and Update: ERP response status: {response.status_code}")
         print(f"Recall and Update: ERP response text: {response.text}")
 
