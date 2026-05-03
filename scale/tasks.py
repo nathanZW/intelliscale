@@ -235,7 +235,7 @@ def update_dnote_completion_status(delivery_note):
             "X-API-Key": api_key
         }
         
-        response = requests.request("POST", url, data=payload, headers=headers, params=querystring)
+        response = requests.request("POST", url, data=payload, headers=headers, params=querystring, timeout=10)
         
         if response.status_code in [200, 201]:
             logger.info(f"Successfully updated Odoo status to 'laid' for delivery note {delivery_note.delivery_note_number}")

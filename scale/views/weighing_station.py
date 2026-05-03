@@ -578,7 +578,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
             logger.debug('Auth headers: %s', headers)
             logger.debug('Auth payload: %s', payload)
 
-            response = requests.request("POST", url, json=payload, headers=headers)
+            response = requests.request("POST", url, json=payload, headers=headers, timeout=10)
 
             logger.info('ERP authenticate response received in %.2f ms', (time.time() - start_time) * 1000)
             logger.debug('Auth response status: %s', response.status_code)
@@ -677,7 +677,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                     "X-API-Key": api_key
                 }
                 cookies = {'session_id': session_id} if session_id else None
-                response = requests.request("POST", url, data=payload, headers=headers, params=params, cookies=cookies)
+                response = requests.request("POST", url, data=payload, headers=headers, params=params, cookies=cookies, timeout=10)
 
                 logger.info('create-commercial-bale response received in %.2f ms', (time.time() - start_time) * 1000)
                 logger.debug('create-commercial-bale response status: %s', response.status_code)
@@ -777,7 +777,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                         logger.info('Sending update-mass request to: %s', base_url)
                         logger.debug('Calling update-mass with params: %s', params)
                     start_time = time.time()
-                    response = requests.request("POST", base_url, data=payload, params=params, headers=headers, cookies=cookies)
+                    response = requests.request("POST", base_url, data=payload, params=params, headers=headers, cookies=cookies, timeout=10)
                     logger.info('ERP scaleserver response received in %.2f ms', (time.time() - start_time) * 1000)
                     logger.debug('update-mass response status: %s', response.status_code)
                     logger.debug('update-mass response text: %s', response.text)
