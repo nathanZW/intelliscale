@@ -61,7 +61,7 @@ python manage.py test users
 
 ### Views (`scale/views/`)
 
-Views are split into modules by domain: `scale.py`, `weighing_station.py`, `weighing_process.py`, `weighing_record.py`, `delivery_note.py`, `printing.py`, `settings.py`, `product.py`, `ajax.py`. All re-exported through `__init__.py`.
+Views are split into modules by domain: `scale.py`, `weighing_station.py`, `weighing_process.py`, `weighing_record.py`, `delivery_note.py`, `printing.py`, `settings.py`, `product.py`, `ajax.py`, `weight_stream.py`. All re-exported through `__init__.py`.
 
 ### Background Services
 
@@ -77,7 +77,7 @@ Views are split into modules by domain: `scale.py`, `weighing_station.py`, `weig
 - Django 5.2.1 with SQLite (WAL mode enabled; PostgreSQL config commented out in settings)
 - Celery 5.4.0 + Redis (`redis://localhost:6379/0`) for async tasks
 - pyserial 3.5 for scale communication
-- openpyxl 3.1.5 for Excel export, qrcode 8.0 + Pillow 10.4.0 for QR generation
+- openpyxl 3.1.5 for Excel export, qrcode 8.0 + Pillow 11.2.1 for QR generation
 - reportlab 4.4.10 for PDF exports
 - Production: Gunicorn + Nginx (setup via external install script)
 - Templates use Django template engine with Bootstrap (server-rendered HTML)
