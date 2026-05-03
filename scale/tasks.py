@@ -147,8 +147,8 @@ def sync_single_delivery_note(odoo_record):
                     last_sync_attempt=timezone.now(),
                     is_synced=False
                 )
-        except:
-            pass
+        except Exception as inner_e:
+            logger.error("Failed to record sync error on delivery note: %s", inner_e)
         
         raise  # Re-raise to be caught by parent function
 
