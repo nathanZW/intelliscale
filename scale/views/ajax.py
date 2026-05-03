@@ -112,7 +112,7 @@ def recall_and_update_bale(request):
 
         print(f"Recall and Update: Making API request to: {api_url} with params: {params}")
         headers = {
-            "User-Agent": "insomnia/11.5.0",
+            "User-Agent": "intelliscale/1.0",
             "X-API-Key": api_key
         }
         response = requests.post(api_url, headers=headers, params=params, timeout=10)

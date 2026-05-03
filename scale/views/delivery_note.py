@@ -169,7 +169,7 @@ def recall_delivery_note(request, pk):
             params = {'dnote_number': delivery_note.delivery_note_number}
             
             headers = {
-                "User-Agent": "insomnia/11.5.0",
+                "User-Agent": "intelliscale/1.0",
                 "X-API-Key": company_settings.api_key
             }
             
@@ -373,7 +373,7 @@ def update_dnote_completion_status_with_api_key(delivery_note):
         payload = ""
 
         headers = {
-            "User-Agent": "insomnia/11.5.0",
+            "User-Agent": "intelliscale/1.0",
             "X-API-Key": api_key
         }
 
@@ -517,7 +517,7 @@ def recall_bale(request, pk):
                     }
                 }
                 auth_headers = {
-                    "User-Agent": "insomnia/11.5.0",
+                    "User-Agent": "intelliscale/1.0",
                     "X-API-Key": api_key
                 }
                 
@@ -572,7 +572,7 @@ def recall_bale(request, pk):
             api_url = f"{company_settings.api_url}/api/bales/recall-bale/?barcode={barcode}"
             
             headers = {
-                "User-Agent": "insomnia/11.5.0",
+                "User-Agent": "intelliscale/1.0",
                 "X-API-Key": api_key
             }
             
@@ -710,7 +710,7 @@ def close_commercial_delivery_note(request, pk):
         }
         
         headers = {
-            "User-Agent": "insomnia/11.5.0",
+            "User-Agent": "intelliscale/1.0",
             "X-API-Key": api_key
         }
         

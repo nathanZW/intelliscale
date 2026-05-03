@@ -567,7 +567,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
                 }
             }
             headers = {
-                "User-Agent": "insomnia/11.5.0",
+                "User-Agent": "intelliscale/1.0",
                 "Content-Type": "application/json",
                 "X-API-Key": api_key
             }
@@ -673,7 +673,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
 
                 # Make the API call
                 headers = {
-                    "User-Agent": "insomnia/11.5.0",
+                    "User-Agent": "intelliscale/1.0",
                     "X-API-Key": api_key
                 }
                 cookies = {'session_id': session_id} if session_id else None
@@ -769,7 +769,7 @@ def send_to_erp(barcode, net_weight, scale_id, weighing_record_id, request, cust
 
                     payload = ""
                     headers = {
-                        "User-Agent": "insomnia/11.5.0",
+                        "User-Agent": "intelliscale/1.0",
                         "X-API-Key": api_key
                     }
                     cookies = {'session_id': session_id} if session_id else None

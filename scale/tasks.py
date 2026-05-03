@@ -36,7 +36,7 @@ def sync_odoo_delivery_notes():
                 params={'include_bales': 'true',
                         'state': 'open,checked,laid'},
                 headers={
-                    'User-Agent': 'insomnia/11.5.0',
+                    'User-Agent': 'intelliscale/1.0',
                     # Add cookie authentication if needed
                     # 'Cookie': 'your-session-cookie-here'
                 },
@@ -237,7 +237,7 @@ def update_dnote_completion_status(delivery_note):
         payload = ""
 
         headers = {
-            "User-Agent": "insomnia/11.5.0",
+            "User-Agent": "intelliscale/1.0",
             "X-API-Key": api_key
         }
         
